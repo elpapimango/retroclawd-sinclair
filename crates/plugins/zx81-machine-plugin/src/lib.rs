@@ -404,7 +404,12 @@ fn handle_machine_command(
             Ok(MachineResponse::Ack)
         }
         MachineCommand::KeyEvent { key, pressed } => {
-            if let Some(key) = zx81_key_from_name(&key) {
+            // A combo is Shift plus a key, pressed and released together (`Plus` is Shift+K).
+            let keys: Vec<Zx81Key> = match zx81_combo_from_name(&key) {
+                Some(base) => vec![Zx81Key::Shift, base],
+                None => zx81_key_from_name(&key).into_iter().collect(),
+            };
+            for key in keys {
                 if pressed {
                     record.machine.press_key(key);
                 } else {
@@ -474,12 +479,68 @@ fn snapshot_extension(name: Option<&str>) -> String {
 /// Every key name this machine's `KeyEvent` accepts -- built from the same
 /// tables the event handler looks names up in, so the list cannot drift.
 fn key_names() -> Vec<plugin_api::MachineKeyInfo> {
-    let mut infos = plugin_api::key_infos(zx81_key_table().iter().map(|(name, _)| *name));
-    // The ZX81 keys other than letters, digits and Space type no character
-    // this plugin maps (its `.` key has no name yet), so a symbolic host
-    // layout covers letters, digits and Space here.
-    plugin_api::set_key_chars(&mut infos, &[("Space", " ")]);
+    let mut infos = plugin_api::key_infos(
+        zx81_key_table()
+            .iter()
+            .map(|(name, _)| *name)
+            .chain(zx81_combo_table().iter().map(|(name, _)| *name)),
+    );
+    plugin_api::set_key_chars(&mut infos, ZX81_CHARS);
     infos
+}
+
+/// The ASCII character each key types on a real ZX81 (its Shift legends), for the host's symbolic keyboard layout and for
+/// typing text. `£` (Shift+Space) has no ASCII character, so it is a key but types nothing.
+const ZX81_CHARS: &[(&str, &str)] = &[
+    ("Space", " "),
+    ("Period", "."),
+    ("Colon", ":"),
+    ("Semicolon", ";"),
+    ("Question", "?"),
+    ("Slash", "/"),
+    ("DoubleQuote", "\""),
+    ("RightParen", ")"),
+    ("LeftParen", "("),
+    ("Dollar", "$"),
+    ("Equals", "="),
+    ("Plus", "+"),
+    ("Minus", "-"),
+    ("Comma", ","),
+    ("GreaterThan", ">"),
+    ("LessThan", "<"),
+    ("Asterisk", "*"),
+];
+
+/// The keys that are Shift plus another key, with the symbol each types. The pairs are read from the ZX81 ROM's own
+/// shifted key table (0x00A5): Shift+Z `:`, X `;`, C `?`, V `/`, P `"`, O `)`, I `(`, U `$`, L `=`, K `+`, J `-`,
+/// `.` `,`, M `>`, N `<`, B `*`, Space `£`.
+fn zx81_combo_table() -> &'static [(&'static str, Zx81Key)] {
+    use Zx81Key::*;
+    &[
+        ("Colon", Z),
+        ("Semicolon", X),
+        ("Question", C),
+        ("Slash", V),
+        ("DoubleQuote", P),
+        ("RightParen", O),
+        ("LeftParen", I),
+        ("Dollar", U),
+        ("Equals", L),
+        ("Plus", K),
+        ("Minus", J),
+        ("Comma", Dot),
+        ("GreaterThan", M),
+        ("LessThan", N),
+        ("Asterisk", B),
+        ("Pound", Space),
+    ]
+}
+
+fn zx81_combo_from_name(name: &str) -> Option<Zx81Key> {
+    zx81_combo_table()
+        .iter()
+        .find(|(candidate, _)| *candidate == name)
+        .map(|(_, value)| *value)
 }
 
 fn zx81_key_table() -> &'static [(&'static str, Zx81Key)] {
@@ -522,6 +583,7 @@ fn zx81_key_table() -> &'static [(&'static str, Zx81Key)] {
         ("Digit8", Digit8),
         ("Digit9", Digit9),
         ("Space", Space),
+        ("Period", Dot),
         ("Enter", Enter),
         ("ShiftLeft", Shift),
         ("ShiftRight", Shift),
@@ -848,6 +910,45 @@ mod tests {
         }
         // The free aliases work: `a` finds KeyA.
         assert!(names.iter().any(|k| k.name == "KeyA" && k.matches("a")));
+    }
+
+    #[test]
+    fn the_dot_key_and_the_shifted_symbols_are_named_and_typable() {
+        // The ZX81 has 40 keys; the `.` key was missing from the list for a long time.
+        assert_eq!(zx81_key_from_name("Period"), Some(Zx81Key::Dot));
+        // Shift plus a key, per the ROM's shifted key table (0x00A5): `+` is Shift+K, `*` Shift+B, `"` Shift+P, ...
+        for (name, key) in [
+            ("Plus", Zx81Key::K),
+            ("Asterisk", Zx81Key::B),
+            ("DoubleQuote", Zx81Key::P),
+            ("Colon", Zx81Key::Z),
+            ("Equals", Zx81Key::L),
+            ("Comma", Zx81Key::Dot),
+        ] {
+            assert_eq!(zx81_combo_from_name(name), Some(key), "{name}");
+        }
+        assert_eq!(
+            zx81_combo_from_name("Period"),
+            None,
+            "Period is a key, not a combo"
+        );
+        // Every combo and every typed character is a listed key, each character belongs to one key, and the
+        // characters type what their names say.
+        let names = key_names();
+        for (name, _) in zx81_combo_table() {
+            assert!(names.iter().any(|k| k.name == *name), "{name}");
+        }
+        let mut typed = std::collections::HashSet::new();
+        for (name, chars) in ZX81_CHARS {
+            assert!(names.iter().any(|k| k.name == *name), "{name}");
+            assert!(typed.insert(*chars), "{chars:?} typed by two keys");
+        }
+        for symbol in "+-*/=()<>:;?,.\"$ ".chars() {
+            assert!(
+                typed.contains(symbol.to_string().as_str()),
+                "{symbol:?} cannot be typed"
+            );
+        }
     }
 
     use super::*;

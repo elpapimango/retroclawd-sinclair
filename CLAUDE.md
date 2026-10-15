@@ -75,6 +75,12 @@ The notes below were written in the host repository before the split and refer t
   (`machine::with_border`) is shared -- CPU/bus-agnostic, lives in
   `machine` since `Machine::render_frame`'s RGB-tuple contract is already
   defined there.
+  ZX81 keys: all 40 are named (`Period` is the `.` key; the arrow keys are Shift+5..8) and the symbols on the shifted keys are
+  combo keys (`Plus` = Shift+K, `Asterisk` = Shift+B, `DoubleQuote` = Shift+P, `Colon`, `Semicolon`, `Question`, `Slash`,
+  `LeftParen`, `RightParen`, `Dollar`, `Equals`, `Minus`, `Comma`, `GreaterThan`, `LessThan`, `Pound`), each typing its ASCII
+  character, so text can be typed and pasted; the pairs come from the ROM's shifted key table (0x00A5). The ROM scans the keyboard
+  once a frame and debounces it: typing faster than about 160 ms per key event loses keys (`--type-delay 160`, or
+  `paste_delay_ms` in `[machines.zx81.input]`).
   Interrupts: `Cpu` supports both a maskable interrupt (`request_interrupt`,
   IM0/1/2-vectored, gated on `iff1`) and a real NMI (`request_nmi`, always
   accepted, fixed vector `0x0066`, clears only `iff1` not `iff2`, priority
