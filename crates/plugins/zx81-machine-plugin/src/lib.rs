@@ -151,15 +151,33 @@ fn machine_profile() -> MachineProfile {
             MachineCapability::Debug,
         ],
         media_kinds: vec![MediaKind::Snapshot],
-        options: vec![MachineOptionInfo {
-            key: "rom".to_string(),
-            flag: "rom".to_string(),
-            short: None,
-            kind: MachineOptionKind::File,
-            default: None,
-            required: true,
-            description: "8K ZX81 ROM image".to_string(),
-        }],
+        options: vec![
+            MachineOptionInfo {
+                key: "rom".to_string(),
+                flag: "rom".to_string(),
+                short: None,
+                kind: MachineOptionKind::File,
+                default: None,
+                required: true,
+                description: "8K ZX81 ROM image".to_string(),
+            },
+            MachineOptionInfo {
+                key: "ram_kb".to_string(),
+                flag: "ram-kb".to_string(),
+                short: None,
+                kind: MachineOptionKind::Enum {
+                    choices: zx81::RAM_KB_CHOICES
+                        .iter()
+                        .map(|kb| kb.to_string())
+                        .collect(),
+                },
+                default: Some(plugin_api::DebugValue::Text("1".to_string())),
+                required: false,
+                description:
+                    "RAM installed, in K: the on-board 1K, a 2K upgrade, or a 16K/32K/48K/56K pack"
+                        .to_string(),
+            },
+        ],
         key_names: key_names(),
     }
 }
@@ -198,8 +216,20 @@ fn create_machine(req: MachineCreateRequest) -> Result<MachineCreateResponse, St
         ));
     }
 
-    if !req.options.is_empty() {
-        return Err("unsupported machine-create options for zx81 plugin".to_string());
+    let mut ram_kb = 1usize;
+    for option in &req.options {
+        match (option.key.as_str(), &option.value) {
+            ("ram_kb", plugin_api::DebugValue::Text(kb)) => {
+                ram_kb = kb.parse().map_err(|_| {
+                    format!("option \"ram_kb\" must be a number of K, got \"{kb}\"")
+                })?;
+            }
+            (key, _) => {
+                return Err(format!(
+                    "unsupported machine-create option \"{key}\" for zx81 plugin"
+                ));
+            }
+        }
     }
 
     let region = parse_region(req.region.as_deref())?;
@@ -210,7 +240,7 @@ fn create_machine(req: MachineCreateRequest) -> Result<MachineCreateResponse, St
     state.instances.insert(
         instance,
         InstanceRecord {
-            machine: Zx81::new(rom.to_vec(), region),
+            machine: Zx81::with_ram_kb(rom.to_vec(), region, ram_kb)?,
             region: region_name(region).to_string(),
             paused: false,
             breakpoints: Vec::new(),

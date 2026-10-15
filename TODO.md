@@ -115,12 +115,21 @@ order:
 Do not import code blindly; treat ep128emu as a secondary implementation source, not a substitute
 for hardware verification.
 
-## ZX81 roadmap — PARKED
+## ZX81 roadmap — resumed (2026-10-15)
 
 ### DONE: baseline
 
 Current ZX81 support includes real keyboard scanning, NMI delivery, display-file rendering, reset,
 `.p`/`.p81` loading, and internal save states.
+
+### DONE (2026-10-15): memory model and video fetch (items 2 and 3 below, driven by the `rc-suite` ZX81 cases)
+
+The memory map has the hardware's mirrors (ROM across `0x0000-0x3FFF` and `0x8000-0xBFFF`, RAM repeated through
+`0x4000-0x7FFF`, data reads at `0xC000+` seeing `0x4000-0x7FFF`) and selectable RAM (`--ram-kb` 1, 2, 16, 32, 48, 56). An opcode fetch at `0x8000`+
+is a NOP when bit 6 of the byte is clear (`Bus::fetch_opcode`, a default method of the shared `machine::Bus`),
+and the maskable interrupt is asserted while bit 6 of `R` is zero. The ROM's own display routine therefore runs:
+`FRAMES` counts 50 a second in SLOW mode. The picture is still decoded on demand from the display file, not
+generated pixel by pixel from the fetch pattern.
 
 ### BACKLOG: external parity execution sequence (PARKED; gap vs ZEsarUX-class ZX81 emulators)
 
@@ -128,9 +137,11 @@ If the ZX81 track is resumed, execute in this strict order (do not reorder):
 
 1. Tape path parity: implement tape input/output with verified pulse/ROM-loader semantics. Keep
    cassette audio as the only ZX81 audio target.
-2. Memory model parity: add rampack support instead of the current fixed 1K RAM ceiling.
+2. Memory model parity: add rampack support instead of the current fixed 1K RAM ceiling. **Done**, see above.
 3. Video-behavior parity: move beyond on-demand display-file decode toward continuous video behavior
-   needed for software-dependent display tricks.
+   needed for software-dependent display tricks. **Partly done**: the fetch and interrupt mechanism runs the ROM's
+   display routine (see above); the picture is still decoded on demand, so tricks that change the display
+   file mid-frame are not drawn yet.
 4. Snapshot/media parity: add `.p`/`.p81` writing; decode `.p81` program names only after verifying
    the ZX81 character table against ROM data.
 5. ROM behavior checks: add interactive machine-level checks that continue stepping through

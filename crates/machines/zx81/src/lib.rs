@@ -3,7 +3,7 @@ mod keyboard;
 mod save_state;
 mod video;
 
-use machine::{Clock, Machine, MemoryBus, Region, RunStats};
+use machine::{Clock, Machine, Region, RunStats};
 use z80::Cpu;
 
 use bus::Zx81Bus;
@@ -15,6 +15,8 @@ pub const ROM_SIZE: usize = 0x2000;
 pub const RAM_BASE: u16 = 0x4000;
 /// Unexpanded ZX81 RAM size (1K on-board, no 16K RAM pack).
 pub const RAM_SIZE: usize = 0x0400;
+/// The RAM sizes (in K) a machine can have: the on-board 1K, a 2K upgrade, and the 16K, 32K, 48K and 56K packs.
+pub const RAM_KB_CHOICES: [usize; 6] = [1, 2, 16, 32, 48, 56];
 
 /// Real ZX81 NMI generator rate while running: one pulse per TV line, 64us
 /// (PAL) -- 3.25MHz clock_hz * 64e-6s = 208 T-states exactly, which is also
@@ -66,12 +68,23 @@ impl Zx81 {
     /// market variant's clock/frame rate (see `Machine::clock_hz`/
     /// `frame_hz` below).
     pub fn new(rom: Vec<u8>, region: Region) -> Self {
-        let mut mem = MemoryBus::new();
-        mem.map_rom(0x0000, rom);
-        mem.map_ram(RAM_BASE, RAM_SIZE);
+        Self::build(rom, region, 1)
+    }
+
+    /// Like `new`, with `ram_kb` K of RAM installed: one of `RAM_KB_CHOICES`.
+    pub fn with_ram_kb(rom: Vec<u8>, region: Region, ram_kb: usize) -> Result<Self, String> {
+        if !RAM_KB_CHOICES.contains(&ram_kb) {
+            return Err(format!(
+                "unsupported ZX81 RAM size {ram_kb}K (choose one of {RAM_KB_CHOICES:?})"
+            ));
+        }
+        Ok(Self::build(rom, region, ram_kb))
+    }
+
+    fn build(rom: Vec<u8>, region: Region, ram_kb: usize) -> Self {
         Self {
             cpu: Cpu::new(),
-            bus: Zx81Bus::new(mem),
+            bus: Zx81Bus::new(rom, ram_kb),
             region,
             nmi_cycles: 0,
             border: true,
@@ -120,31 +133,27 @@ impl Zx81 {
     /// register value) are taken from ZEsarUX's `new_load_zx81_set_common_
     /// registers` (`src/snap/snap_zx8081.c`,
     /// <https://github.com/chernandezba/zesarux>, GPLv3, Cesar Hernandez
-    /// Bano -- see `CREDITS.md`), with `RAMTOP` fixed at the top of this
-    /// machine's own 1K RAM (`0x43FF`) since there's no rampack concept
-    /// here.
+    /// Bano -- see `CREDITS.md`), with `RAMTOP` at the top of this
+    /// machine's own RAM (`0x43FF` for the stock 1K, `0x7FFF` with a 16K pack).
     ///
     /// Real `.p`/`.p81` files are routinely several KB (a `BASIC` program
     /// plus variables plus workspace, saved from a machine with a 16K+
-    /// rampack) -- loading one into this 1K-RAM model will silently
-    /// truncate at `0x43FF` (`MemoryBus::load`'s existing, documented
-    /// truncation behavior), same as any other over-length load onto this
-    /// machine. Not fixed here: modeling a rampack is a separate, larger
-    /// feature (see `TODO.md`), not a snapshot-loading concern.
+    /// rampack): load one into a machine built with a matching `ram_kb`,
+    /// or it is truncated at the end of the installed RAM.
     pub fn load_p_snapshot(&mut self, snapshot: zx81_snapshot::Snapshot) {
-        const RAMTOP: u16 = (RAM_BASE as usize + RAM_SIZE - 1) as u16; // 0x43FF
-        const SP_VALUE: u16 = RAMTOP - 3;
-        const RAMTOP_PLUS_ONE: u16 = RAMTOP.wrapping_add(1);
+        let ramtop = self.bus.ram_end();
+        let sp_value = ramtop - 3;
+        let ramtop_plus_one = ramtop.wrapping_add(1);
 
         self.bus.load(0x4009, &snapshot.data);
 
-        let [sp_lo, sp_hi] = SP_VALUE.to_le_bytes();
-        let [top_lo, top_hi] = RAMTOP_PLUS_ONE.to_le_bytes();
+        let [sp_lo, sp_hi] = sp_value.to_le_bytes();
+        let [top_lo, top_hi] = ramtop_plus_one.to_le_bytes();
         self.bus.load(
             0x4000,
             &[0xFF, 0x80, sp_lo, sp_hi, top_lo, top_hi, 0x00, 0xFE, 0xFF],
         );
-        self.bus.load(SP_VALUE, &[0x76, 0x06, 0x00, 0x3E]);
+        self.bus.load(sp_value, &[0x76, 0x06, 0x00, 0x3E]);
 
         self.cpu = Cpu::new();
         self.cpu.af = 0x0B85;
@@ -161,7 +170,7 @@ impl Zx81 {
         self.cpu.r = 0xDD;
         self.cpu.ix = 0x0281;
         self.cpu.iy = 0x4000;
-        self.cpu.sp = SP_VALUE;
+        self.cpu.sp = sp_value;
         self.cpu.pc = 0x0207;
 
         // Real hardware is always mid-SLOW (NMI generator running) by the
@@ -183,7 +192,7 @@ impl Zx81 {
 
     pub(crate) fn load_state(&mut self, state: save_state::SaveState) {
         self.cpu = state.cpu;
-        self.bus.load(RAM_BASE, &state.ram);
+        self.bus.load(self.bus.ram_start(), &state.ram);
         self.bus.set_keyboard(state.keyboard);
         self.bus
             .set_nmi_generator_running(state.nmi_generator_running);
@@ -220,6 +229,13 @@ impl Machine for Zx81 {
     /// (called once per `frame_hz()` tick by `Clock::run`/the Bevy GUI loop)
     /// because the real NMI rate is far finer-grained than once a frame.
     fn step(&mut self) -> u32 {
+        // The maskable interrupt is asserted while bit 6 of the refresh register is zero ("ZX80/ZX81 Video
+        // Interrupts", <https://problemkaputt.de/zxdocs.htm>: INT is wired to A6 of the refresh address). The
+        // ROM sets R before it runs a line of the display file so that the interrupt arrives when the line
+        // has been drawn; the CPU accepts it only while its interrupts are enabled, as on hardware.
+        if self.cpu.r & 0x40 == 0 {
+            self.cpu.request_interrupt();
+        }
         let cycles = self.cpu.step(&mut self.bus);
         if self.bus.nmi_generator_running() {
             self.nmi_cycles += cycles as u32;
@@ -236,22 +252,12 @@ impl Machine for Zx81 {
     }
 
     // No `request_interrupt` (maskable) override -- uses the `Machine`
-    // trait's default no-op. Real ZX81 hardware has no maskable interrupt
-    // source at all (nothing on real hardware ever pulls the Z80's INT
-    // line); video generation is driven by NMI instead (see `step` above).
-    // A previous version of this method fired the same once-per-frame
-    // maskable `INT` as ZX Spectrum on the theory that *some* interrupt
-    // beats none for a HALT-waiting ROM loop -- that was wrong, not just
-    // imprecise: the real ROM's byte at `0x0038` (where IM1 vectors) is the
-    // middle of an unrelated subroutine (`DEC C` / `JP NZ` / `POP HL` /
-    // `DEC B` / ...), not a designed interrupt entry point, since real
-    // hardware never needed one there. Jumping into it mid-instruction-
-    // stream corrupted the stack (an unpaired `POP HL`) and registers,
-    // which is what was actually causing ZX81 to "stall" in the GUI --
-    // confirmed by disassembling `roms/zx81/zx81.rom` at both `0x0038` and
-    // the real NMI vector `0x0066` (genuine handler code: `EX AF,AF'`
-    // ... `RET`) and comparing. No interrupt at all is closer to correct
-    // than a fabricated one landing on unrelated code.
+    // trait's default no-op, because the ZX81 has no once-per-frame
+    // interrupt: its INT comes from the refresh counter and is raised in
+    // `step` (see there), and the NMI comes from the line generator. A
+    // once-per-frame `INT` like the Spectrum's was tried and was wrong: it
+    // landed in the middle of the ROM's line-counting code at `0x0038` at
+    // moments the display routine never expects, corrupting the stack.
 
     fn registers(&self) -> Vec<(&'static str, u64)> {
         self.cpu.registers()
@@ -359,6 +365,29 @@ mod tests {
         assert!(zx81.bus.nmi_generator_running());
         zx81.write_port(0x00FD, 0);
         assert!(!zx81.bus.nmi_generator_running());
+    }
+
+    /// INT is asserted while bit 6 of R is zero ("ZX80/ZX81 Video Interrupts",
+    /// <https://problemkaputt.de/zxdocs.htm>); the CPU takes it only with interrupts enabled.
+    #[test]
+    fn the_maskable_interrupt_follows_bit_6_of_r() {
+        let run = |r: u64, iff1: u64| {
+            let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
+            zx81.load(RAM_BASE, &[0x00; 8]);
+            zx81.set_pc(RAM_BASE);
+            zx81.set_register("IM", 1).unwrap();
+            zx81.set_register("IFF1", iff1).unwrap();
+            zx81.set_register("R", r).unwrap();
+            zx81.step();
+            pc_of(&zx81)
+        };
+        assert_eq!(run(0x00, 1), 0x0038, "bit 6 clear, interrupts on: RST 38h");
+        assert_eq!(run(0x40, 1), RAM_BASE as u64 + 1, "bit 6 set: no interrupt");
+        assert_eq!(
+            run(0x00, 0),
+            RAM_BASE as u64 + 1,
+            "interrupts off: not taken"
+        );
     }
 
     fn pc_of(zx81: &Zx81) -> u64 {

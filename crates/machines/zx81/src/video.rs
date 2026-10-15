@@ -146,13 +146,9 @@ fn draw_char(rgb: &mut [u8], bus: &Zx81Bus, row_index: usize, col_index: usize, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use machine::MemoryBus;
 
     fn test_bus_with_rom(rom: Vec<u8>) -> Zx81Bus {
-        let mut mem = MemoryBus::new();
-        mem.map_rom(0x0000, rom);
-        mem.map_ram(crate::RAM_BASE, crate::RAM_SIZE);
-        Zx81Bus::new(mem)
+        Zx81Bus::new(rom, 1)
     }
 
     fn test_bus() -> Zx81Bus {

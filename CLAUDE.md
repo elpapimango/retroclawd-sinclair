@@ -82,9 +82,12 @@ The notes below were written in the host repository before the split and refer t
   once per real video frame from `Machine::request_interrupt` (called by
   `machine::Clock::run`/retroclawd's `emu_thread` background thread, once
   per its own tick) -- matches the real ULA's `INT` line exactly. `zx81`
-  has no maskable interrupt source on real
-  hardware at all, so doesn't override `request_interrupt` (stays the
-  trait's no-op default); instead `Zx81::step` fires real NMIs itself, at
+  has no once-per-frame interrupt, so doesn't override `request_interrupt` (stays the
+  trait's no-op default). Its maskable interrupt comes from the refresh counter: `Zx81::step`
+  asserts it while bit 6 of `R` is zero (the ROM's line counting at `0x0038` depends on it), and
+  `Zx81Bus::fetch_opcode` makes an opcode fetch at `0x8000`+ a NOP when the byte's bit 6 is clear, which is how
+  the ROM draws a picture by running the display file as code (hardware facts and sources are
+  in the `rc-suite` ZX81 cases of `retroclawd-tools`). `Zx81::step` also fires real NMIs itself, at
   208 T-states (64us, the real PAL TV line rate) while
   `Zx81Bus::nmi_generator_running` is set -- decoded from bit 1 of the OUT
   port address, verified against `roms/zx81/zx81.rom`'s own `OUT (0xFD)`/
@@ -343,10 +346,10 @@ The notes below were written in the host repository before the split and refer t
   bytes at `0x4009`, then synthesizes the fixed 9-byte system-variable
   header, a 4-byte stack patch, and every register value real ZX81 hardware
   derives from `RAMTOP` before resuming `BASIC` — constants taken from
-  ZEsarUX (see `CREDITS.md`), `RAMTOP` fixed at this crate's own RAM top
-  (`0x43FF`, no rampack concept here). Real `.p`/`.p81` files are routinely
-  several KB (saved from a machine with a 16K+ rampack) — loading one here
-  silently truncates at `0x43FF`, same as any other over-length `load`.
+  ZEsarUX (see `CREDITS.md`), `RAMTOP` at the top of the installed RAM
+  (`0x43FF` for the stock 1K, `0x7FFF` with a 16K pack). Real `.p`/`.p81` files are routinely
+  several KB (saved from a machine with a 16K+ rampack) — build the machine with a matching
+  `--ram-kb`, or the load is truncated at the end of the installed RAM.
   Save states: new `save_state.rs` modules in both `zx_spectrum`/`zx81`
   (`SaveState`, `#[derive(Serialize, Deserialize)]`), serialized via
   `bincode` v2's `serde` compat feature
