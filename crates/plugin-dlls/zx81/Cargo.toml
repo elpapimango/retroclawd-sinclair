@@ -1,0 +1,14 @@
+[package]
+name = "zx81-machine-plugin-dll"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Shared-library build of zx81-machine-plugin: only the C entry points, all logic lives in zx81-machine-plugin"
+
+[lib]
+name = "zx81_machine_plugin"
+crate-type = ["cdylib"]
+
+[dependencies]
+plugin-api = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "d64444aa6a1e38ab5068af216a58091f7ffb2a57" }
+zx81-machine-plugin = { path = "../../plugins/zx81-machine-plugin" }

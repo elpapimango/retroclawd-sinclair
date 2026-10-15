@@ -1,0 +1,37 @@
+# Which firmware satisfies which machine option, by SHA-1.
+#
+# `retroclawd <machine> --firmware auto` reads this file (staged next to the machine libraries as
+# `sinclair.firmware.toml` by tools/build_all.sh), asks the RomM server for its firmware list, and
+# uses the first `sha1` of an entry that the server has. Entries for one (machine, option) are tried
+# in file order, so the preferred dump comes first. Nothing here is a ROM; these are only hashes.
+#
+#   machines   machine ids the entry applies to
+#   option     the machine option key (`retroclawd <machine> --help` lists them)
+#   label      shown in messages
+#   sha1       accepted single-file dumps, preferred first
+#   parts      alternatively: SHA-1s of files to concatenate, in order, into the one image
+#   when       optional: only when these resolved option values match
+
+[[rom]]
+machines = ["zx81"]
+option = "rom"
+label = "ZX81 ROM (edition 2)"
+sha1 = [
+  "7b143ee964e9ada89d1f9e88f0bd48d919184cfc", # zx81.rom / zx81a.rom
+  "a0ade36540561cc1691bb6f0c42ceae12484a102", # zx81-550-original.rom
+  "c6d8e06cb936989f6e1cc7a56d1f092da854a515", # zx81b.rom
+]
+
+[[rom]]
+machines = ["zx-spectrum"]
+option = "rom"
+label = "ZX Spectrum 48K ROM"
+sha1 = ["5ea7c2b824672e914525d1d5c419d71b84a426a2"]
+
+[[rom]]
+machines = ["zx-spectrum-128"]
+option = "rom"
+label = "ZX Spectrum 128K / +2 ROM (32K)"
+sha1 = ["16375d42ea109b47edded7a16028de7fdb3013a1"]
+
+# zx-spectrum-2a3 (+2A / +3) needs the 64K ROM; no dump is committed, so no hash is listed yet.

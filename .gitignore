@@ -1,0 +1,9 @@
+/target
+*.log
+dist/
+# ROM images are copyrighted; this repository is private.
+
+# Firmware and software are copyrighted and never committed. Keep your own dumps here
+# (or fetch firmware with `retroclawd --firmware auto`, see firmware.toml).
+/roms/
+/software/

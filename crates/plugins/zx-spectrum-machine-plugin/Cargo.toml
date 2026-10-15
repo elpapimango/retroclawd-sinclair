@@ -1,0 +1,20 @@
+[package]
+name = "zx-spectrum-machine-plugin"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+
+[lib]
+name = "zx_spectrum_machine_plugin_impl"
+
+[dependencies]
+machine = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "d64444aa6a1e38ab5068af216a58091f7ffb2a57" }
+plugin-api = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "d64444aa6a1e38ab5068af216a58091f7ffb2a57" }
+serde = { version = "1", features = ["derive"] }
+z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "d64444aa6a1e38ab5068af216a58091f7ffb2a57" }
+zx-spectrum = { path = "../../machines/zx-spectrum" }
+z80-snapshot = { path = "../../formats/z80-snapshot" }
+sna-snapshot = { path = "../../formats/sna-snapshot" }
+szx-snapshot = { path = "../../formats/szx-snapshot" }
+zx-tape = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "d64444aa6a1e38ab5068af216a58091f7ffb2a57" }
+dsk = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "d64444aa6a1e38ab5068af216a58091f7ffb2a57" }

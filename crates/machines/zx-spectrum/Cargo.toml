@@ -1,0 +1,19 @@
+[package]
+name = "zx-spectrum"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "d64444aa6a1e38ab5068af216a58091f7ffb2a57" }
+machine = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "d64444aa6a1e38ab5068af216a58091f7ffb2a57" }
+sinclair-keyboard = { path = "../../chips/sinclair-keyboard" }
+z80-snapshot = { path = "../../formats/z80-snapshot" }
+sna-snapshot = { path = "../../formats/sna-snapshot" }
+szx-snapshot = { path = "../../formats/szx-snapshot" }
+ay-3-8910 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "d64444aa6a1e38ab5068af216a58091f7ffb2a57" }
+zx-tape = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "d64444aa6a1e38ab5068af216a58091f7ffb2a57" }
+nec765 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "d64444aa6a1e38ab5068af216a58091f7ffb2a57", features = ["dsk"] }
+dsk = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "d64444aa6a1e38ab5068af216a58091f7ffb2a57" }
+serde = { version = "1", features = ["derive"] }
+bincode = { version = "2", features = ["serde"] }
