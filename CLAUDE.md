@@ -493,4 +493,9 @@ The notes below were written in the host repository before the split and refer t
   returned raw/undecoded — decoding to ASCII needs the ZX81 character-set
   table, not verified against real ROM data here, and isn't needed to load
   the program). Based on ZEsarUX's `snap_zx8081.c` (see `CREDITS.md`).
-  Load-only for now, same as `z80-snapshot`.
+  Both directions since 2026-10-16: `write_p` (the data, nothing else) and `write_p81` (name header + data; a
+  name that does not end in exactly one high-bit byte is an error). `Zx81::save_p_snapshot` collects memory
+  from `0x4009` up to `E_LINE`-1 (the word at `0x4014`, what the ROM's `SAVE` writes; an `E_LINE` outside the
+  installed RAM is an error, i.e. before the ROM has set the system variables up) and the plugin's
+  `SaveSnapshot` returns it for `.p` / `.81`; `.p81` is refused (the emulator has no program name: use
+  `rcsnap convert game.p game.p81 --name NAME`).

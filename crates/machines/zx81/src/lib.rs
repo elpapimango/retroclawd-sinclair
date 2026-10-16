@@ -179,6 +179,27 @@ impl Zx81 {
         self.nmi_cycles = 0;
     }
 
+    /// The machine as a `.p`/`.81` file: memory from `0x4009` up to `E_LINE`-1
+    /// (`E_LINE` is the word at `0x4014`), exactly what the ROM's `SAVE` writes.
+    /// Fails when `E_LINE` does not point into the installed RAM, i.e. the
+    /// system variables are not set up (before the ROM has run).
+    pub fn save_p_snapshot(&self) -> Result<zx81_snapshot::Snapshot, String> {
+        const E_LINE: u16 = 0x4014;
+        const START: u16 = 0x4009;
+        let e_line = u16::from_le_bytes([self.read_memory(E_LINE), self.read_memory(E_LINE + 1)]);
+        let ram_end = self.bus.ram_end();
+        if e_line <= START || e_line > ram_end {
+            return Err(format!(
+                "cannot save a .p: E_LINE is 0x{e_line:04X}, outside 0x{START:04X}-0x{ram_end:04X} \
+                 (the ROM has not set up the system variables)"
+            ));
+        }
+        Ok(zx81_snapshot::Snapshot {
+            program_name_raw: None,
+            data: (START..e_line).map(|a| self.read_memory(a)).collect(),
+        })
+    }
+
     pub(crate) fn save_state(&self) -> save_state::SaveState {
         save_state::SaveState {
             cpu: self.cpu,
@@ -463,6 +484,29 @@ mod tests {
             0x43FC
         );
         assert!(zx81.bus.nmi_generator_running());
+    }
+
+    #[test]
+    fn save_p_snapshot_returns_memory_from_0x4009_to_e_line() {
+        // A file whose E_LINE (system variable at 0x4014 = file offset 11) is 0x4090.
+        let mut data = vec![0x11u8; 0x4090 - 0x4009];
+        data[11..13].copy_from_slice(&0x4090u16.to_le_bytes());
+        let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
+        zx81.load_p_snapshot(zx81_snapshot::Snapshot {
+            program_name_raw: None,
+            data: data.clone(),
+        });
+
+        let saved = zx81.save_p_snapshot().unwrap();
+
+        assert_eq!(saved.data, data);
+        assert_eq!(saved.program_name_raw, None);
+    }
+
+    #[test]
+    fn save_p_snapshot_refuses_a_machine_whose_system_variables_are_unset() {
+        let zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
+        assert!(zx81.save_p_snapshot().unwrap_err().contains("E_LINE"));
     }
 
     #[test]

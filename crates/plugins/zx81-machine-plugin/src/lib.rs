@@ -339,9 +339,23 @@ fn handle_machine_command(
             Ok(MachineResponse::Ack)
         }
         MachineCommand::SaveState => Ok(MachineResponse::StateBlob(record.machine.save_state())),
-        MachineCommand::SaveSnapshot { extension } => Err(format!(
-            "unsupported snapshot save extension \".{extension}\" for zx81 plugin"
-        )),
+        MachineCommand::SaveSnapshot { extension } => match extension.to_ascii_lowercase().as_str()
+        {
+            "p" | "81" => {
+                let snapshot = record.machine.save_p_snapshot()?;
+                Ok(MachineResponse::SnapshotBlob(zx81_snapshot::write_p(
+                    &snapshot,
+                )))
+            }
+            "p81" => Err(
+                "a .p81 needs a program name the emulator does not have: save a .p and add the \
+                 name with `rcsnap convert game.p game.p81 --name NAME`"
+                    .to_string(),
+            ),
+            other => Err(format!(
+                "unsupported snapshot save extension \".{other}\" for zx81 plugin (expected .p or .81)"
+            )),
+        },
         MachineCommand::LoadState { bytes } => {
             record.machine.load_state(&bytes)?;
             Ok(MachineResponse::Ack)

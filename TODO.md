@@ -131,17 +131,22 @@ and the maskable interrupt is asserted while bit 6 of `R` is zero. The ROM's own
 `FRAMES` counts 50 a second in SLOW mode. The picture is still decoded on demand from the display file, not
 generated pixel by pixel from the fetch pattern.
 
-### TODO (2026-10-16): save a `.p` / `.81` (found by the `rc-suite` ZX81 cases)
+### DONE (2026-10-16): save a `.p` / `.81` (found by the `rc-suite` ZX81 cases)
 
-`--dump-snapshot x.p` fails with `unsupported snapshot save extension ".p" for zx81 plugin`: loading exists
-(`Zx81::load_p_snapshot`), saving does not, so a program typed on the emulated ZX81 cannot be kept. Write the file
-ZXDOCS ("Cassette File Images / Content") describes: memory from `0x4009` up to `E_LINE`-1 (`E_LINE` at `0x4014`,
-length `E_LINE - 0x4009`, `VERSN` = 0, `NXTLIN` as it is so a saved program autostarts when loaded). `.81` is the same
-bytes; `.p81` is the same behind a name header (`zx81-snapshot` already parses it; the name has to come from the user).
-Add the writer to `zx81-snapshot` (a `Snapshot` -> bytes counterpart of `parse_p`/`parse_p81`), the plugin's snapshot-save
-path, and a load -> save -> load round-trip test. The host side is the `save_snapshot` dialog/hotkey for the extension.
-Closing it in `retroclawd-tools`: remove `.gap(...)` from `saving_a_p_file_writes_memory_from_0x4009_to_e_line`
-(`crates/rc-suite/tests/zx81.rs`); that run fails until the marker is dropped, on purpose.
+`--dump-snapshot x.p` / `.81` and the save-snapshot hotkey write memory from `0x4009` up to `E_LINE`-1
+(`zx81-snapshot::write_p`, `Zx81::save_p_snapshot`, the plugin's `SaveSnapshot`), verified by the suite: the file
+is that memory, `.81` equals `.p`, and loading a saved file autostarts the program again. `.p81` is not saved
+(no program name in the emulator; `rcsnap convert` adds one).
+
+### TODO (2026-10-16): ZX81 tape (found by the `rc-suite` ZX81 cases)
+
+`--tape x.p` fails with `unsupported media kind for zx81 plugin: Tape (only snapshot is supported)`, and
+`ExportTape` is unsupported too, so the ROM's `LOAD ""` / `SAVE "NAME"` never see a signal. Needed: the ZX81
+tape signal (ZXDOCS, "Cassette": pulses on the MIC output, read through bit 7 of port `0xFE`, the EAR input), a
+`.p` / `.p81` played as a tape (the name from a `.p81` header, none for a `.p`) and a recording of what `SAVE`
+writes back out as a `.p`. The suite's gap case `LOAD "" reads a program from the tape input` (`retroclawd-tools`
+`crates/rc-suite/tests/zx81.rs`) defines it; it has only ever failed on the missing media kind, so its typed
+`J""` and the 2000-frame budget are unchecked until the feature exists.
 
 ### BACKLOG: external parity execution sequence (PARKED; gap vs ZEsarUX-class ZX81 emulators)
 

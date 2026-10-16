@@ -6,8 +6,9 @@
 //! file layout (not copied; this is a fresh Rust implementation of the same
 //! documented behavior). See `CREDITS.md` at the repo root.
 //!
-//! Deliberately load-only for now (no `write`/save side yet -- planned as a
-//! follow-up).
+//! Both directions: `parse_p`/`parse_p81` read, `write_p`/`write_p81` write the
+//! same bytes back (a `.p`/`.81` is exactly the memory from `0x4009` up to
+//! `E_LINE`-1; a `.p81` is that behind a name header).
 //!
 //! Deliberately format-only, same reasoning as `z80-snapshot`: neither
 //! variant of the ZX81 file format encodes any CPU register state at all
@@ -85,9 +86,62 @@ pub fn parse_p81(bytes: &[u8]) -> Result<Snapshot, Error> {
     }
 }
 
+/// The bytes of a `.p` (or `.81`) file: the data, nothing else.
+pub fn write_p(snapshot: &Snapshot) -> Vec<u8> {
+    snapshot.data.clone()
+}
+
+/// The bytes of a `.p81` file: the name header (its last byte has bit 7 set),
+/// then the data. A snapshot without a name, or whose name does not end in a
+/// byte with bit 7 set, cannot be written as a `.p81`.
+pub fn write_p81(snapshot: &Snapshot) -> Result<Vec<u8>, Error> {
+    let name = snapshot
+        .program_name_raw
+        .as_deref()
+        .filter(|n| !n.is_empty() && n.len() <= NAME_HEADER_SEARCH_LIMIT)
+        .ok_or(Error::MissingNameTerminator)?;
+    let ends_at = name.iter().position(|b| b & 0x80 != 0);
+    if ends_at != Some(name.len() - 1) {
+        return Err(Error::MissingNameTerminator);
+    }
+    let mut bytes = name.to_vec();
+    bytes.extend_from_slice(&snapshot.data);
+    Ok(bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn write_p_is_the_data_and_parse_p_reads_it_back() {
+        let snap = parse_p(&[1, 2, 3]);
+        assert_eq!(write_p(&snap), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn write_p81_round_trips_a_named_file() {
+        let bytes = [0x26, 0x27 | 0x80, 0xAA, 0xBB];
+        let snap = parse_p81(&bytes).unwrap();
+        assert_eq!(write_p81(&snap).unwrap(), bytes.to_vec());
+    }
+
+    #[test]
+    fn write_p81_needs_a_name_that_ends_with_bit_7() {
+        let nameless = parse_p(&[1, 2, 3]);
+        assert_eq!(write_p81(&nameless), Err(Error::MissingNameTerminator));
+        let unterminated = Snapshot {
+            program_name_raw: Some(vec![0x26, 0x27]),
+            data: vec![1],
+        };
+        assert_eq!(write_p81(&unterminated), Err(Error::MissingNameTerminator));
+        // A bit-7 byte inside the name would end it early: not a valid header.
+        let early = Snapshot {
+            program_name_raw: Some(vec![0x26 | 0x80, 0x27 | 0x80]),
+            data: vec![1],
+        };
+        assert_eq!(write_p81(&early), Err(Error::MissingNameTerminator));
+    }
 
     #[test]
     fn parse_p_has_no_name_and_treats_everything_as_data() {
