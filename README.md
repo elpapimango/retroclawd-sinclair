@@ -30,7 +30,7 @@ Put them in the `plugins/` folder next to the `retroclawd` executable (or point
 Everything that is not specific to this family -- `machine`, `plugin-api`, the `z80`/`mos6502` cores and the
 chips/formats several families use -- comes from
 [`retroclawd-crates`](https://github.com/elpapimango/retroclawd-crates) as a git dependency pinned to the commit
-`318a2cc4cc` (the `git = ..., rev = ...` entries in each crate's `Cargo.toml`). To move to a newer commit, run
+`f67f76b862` (the `git = ..., rev = ...` entries in each crate's `Cargo.toml`). To move to a newer commit, run
 `tools/bump_pin.sh` in the application repository (it rewrites the pins, runs the tests and records the result), or
 by hand: change the rev in every manifest, run `cargo update`, and check the plugin ABI policy in
 `retroclawd-crates/docs/plugin-abi.md` (a plugin must be built with the same ABI major, and a protocol version the
