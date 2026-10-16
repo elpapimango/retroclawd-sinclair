@@ -397,9 +397,18 @@ fn handle_machine_command(
                             zx81_snapshot::parse_p81(&bytes).map_err(|e| e.to_string())?;
                         (snapshot.program_name_raw.unwrap_or_default(), snapshot.data)
                     }
+                    // Pulse formats: the signal itself, rescaled to the ZX81's clock. Such a tape plays through `LOAD`, but
+                    // the fast-load trap (which needs the file) is off.
+                    "tzx" | "pzx" | "csw" | "voc" => {
+                        let extension = snapshot_extension(name.as_deref());
+                        record
+                            .machine
+                            .load_tape(pulse_tape_for_zx81(&extension, &bytes)?);
+                        return Ok(MachineResponse::Ack);
+                    }
                     other => {
                         return Err(format!(
-                            "unsupported tape file for zx81 plugin: .{other} (expected .p, .81 or .p81)"
+                            "unsupported tape file for zx81 plugin: .{other} (expected .p, .81, .p81, .tzx, .pzx, .csw or .voc)"
                         ));
                     }
                 };
@@ -535,6 +544,21 @@ fn handle_machine_command(
             Ok(MachineResponse::Debug(response))
         }
     }
+}
+
+/// A `.tzx` / `.pzx` / `.csw` / `.voc` as the ZX81 hears it. The parsers give pulse lengths in the Spectrum's domain --
+/// `.tzx` and `.pzx` count T-states of the 3.5 MHz Spectrum, `.csw` and `.voc` turn seconds into cycles at 3.5469 MHz -- and
+/// the ZX81's CPU runs at 3.25 MHz, so the tape is rescaled (a second of signal must stay a second of signal).
+fn pulse_tape_for_zx81(extension: &str, bytes: &[u8]) -> Result<zx_tape::Tape, String> {
+    const ZX81_HZ: u64 = 3_250_000;
+    let (tape, from_hz) = match extension {
+        "tzx" => (zx_tape::parse_tzx(bytes), 3_500_000),
+        "pzx" => (zx_tape::parse_pzx(bytes), 3_500_000),
+        "csw" => (zx_tape::parse_csw(bytes), 3_546_900),
+        "voc" => (zx_tape::parse_voc(bytes), 3_546_900),
+        other => return Err(format!("not a pulse tape format: .{other}")),
+    };
+    Ok(tape.map_err(|e| e.to_string())?.rescaled(from_hz, ZX81_HZ))
 }
 
 /// The file name without its extension and folders (`demo` for `C:\games\demo.p`).
@@ -1168,5 +1192,34 @@ mod tests {
             checked > 0,
             "no firmware.toml entry applies to this plugin's machines"
         );
+    }
+
+    #[test]
+    fn pulse_tapes_are_rescaled_to_the_zx81_clock() {
+        // One second of signal in the clock each parser counts in: a .tzx in 3.5 MHz T-states (a pause block would use ms),
+        // a .voc in seconds at 3.5469 MHz. Both must come out as one second of the ZX81's 3.25 MHz.
+        let pulses = |hz: u32| {
+            zx_tape::Tape::from_pulses([
+                zx_tape::Pulse {
+                    cycles: hz / 2,
+                    level: true,
+                },
+                zx_tape::Pulse {
+                    cycles: hz / 2,
+                    level: false,
+                },
+            ])
+        };
+        let tzx = zx_tape::write_tzx(&pulses(3_500_000));
+        let tape = pulse_tape_for_zx81("tzx", &tzx).unwrap();
+        let cycles = tape.total_cycles() as i64;
+        assert!((cycles - 3_250_000).abs() < 16_250, "tzx: {cycles}");
+
+        let voc = zx_tape::write_voc(&pulses(3_546_900), 44_100).unwrap();
+        let tape = pulse_tape_for_zx81("voc", &voc).unwrap();
+        let cycles = tape.total_cycles() as i64;
+        assert!((cycles - 3_250_000).abs() < 32_500, "voc: {cycles}");
+
+        assert!(pulse_tape_for_zx81("wav", &[]).is_err());
     }
 }

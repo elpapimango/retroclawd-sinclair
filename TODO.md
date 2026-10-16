@@ -144,9 +144,8 @@ is that memory, `.81` equals `.p`, and loading a saved file autostarts the progr
 in, and `SAVE "NAME"` is recorded from the MIC output and written back as a `.p` / `.81` / `.p81` by `--tape-save` and the
 save-tape hotkey. Verified against the real ROM: load, save, and save-then-load. Since then (same day): an opt-in
 fast-load trap (`--fast-tape-load`), the tape position in `.state` files, and the 60 Hz bit 6 of port `0xFE` (`--region
-ntsc` gets the ROM's short top margin). See CLAUDE.md "ZX81 tape". Open: `.wav` / `.tzx` / `.csw` input for the ZX81
-(`zx-tape` has no way to rescale its 3.5469 MHz pulse lengths to the ZX81's 3.25 MHz: add one in `retroclawd-crates`, then
-bump the pin), ZX80 (a different file layout: no name, loads at 4000h).
+ntsc` gets the ROM's short top margin). See CLAUDE.md "ZX81 tape". Also: `.tzx` / `.pzx` / `.csw` / `.voc` tapes (rescaled with the new `Tape::rescaled`). Open: `.wav` (not parsed by `zx-tape`
+at all), ZX80 (a different file layout: no name, loads at 4000h).
 
 ### DONE (2026-10-16): Spectrum frame length (found by the `rc-suite` Spectrum cases)
 

@@ -419,9 +419,12 @@ The notes below were written in the host repository before the split and refer t
   default; the suite loads a 2.9K program with it in well under 900 frames while the same run without it is still reading.
   A save state keeps the tape's position, the MIC latch and the cycle count (not the pulses: attach the same file before
   loading the state). Bit 6 of a port `0xFE` read is the refresh rate, 1 on a 50 Hz machine and 0 on a 60 Hz one (`--region
-  ntsc`): the ROM's keyboard routine at `0x02BB` turns it into the picture's top margin, 55 lines or 31. Tape files in
-  other formats (`.tzx`, `.csw`, `.voc`, `.pzx`) are not accepted for the ZX81: `zx-tape` stores their pulses in 3.5469 MHz
-  T-states and has no way to rescale them to the ZX81's 3.25 MHz yet.
+  ntsc`): the ROM's keyboard routine at `0x02BB` turns it into the picture's top margin, 55 lines or 31. Pulse tape
+  formats work too (2026-10-16): `.tzx` and `.pzx` (T-states of the 3.5 MHz Spectrum) and `.csw` / `.voc` (seconds, turned into cycles
+  at 3.5469 MHz by the parser) are rescaled to the ZX81's 3.25 MHz by `zx_tape::Tape::rescaled` (added to `retroclawd-crates` for
+  this) in the plugin's `pulse_tape_for_zx81`, unit-tested per format (a second of signal stays a second). They play in real time
+  (no file, so no fast-load trap). The ROM's loader tolerates about 8% of timing error, so a suite case cannot tell a missing rescale
+  from a correct one: the unit test does.
   **A real bug found by the 16K cases (2026-10-16)**: `video::decode_rows` stopped a full 32-character row without
   consuming its NEWLINE, so the expanded display file of a machine with 3K+ RAM (24 rows of 33 bytes) decoded as every
   other row empty and the last row, the prompt, was never shown: a 16K ZX81 drew a blank screen. Fixed, with a unit
