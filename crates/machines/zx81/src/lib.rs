@@ -1,6 +1,7 @@
 mod bus;
 mod keyboard;
 mod save_state;
+pub mod tape;
 mod video;
 
 use machine::{Clock, Machine, Region, RunStats};
@@ -28,7 +29,7 @@ const NMI_PERIOD_TSTATES: u32 = 208;
 
 /// A ZX81: a Z80 core, an 8K ROM, 1K of RAM, a keyboard matrix, and video
 /// output (`render_frame`, decoded from the display file using the real
-/// ROM character generator). No tape yet. `step` fires a real NMI at
+/// ROM character generator), and a cassette interface (`tape`). `step` fires a real NMI at
 /// `NMI_PERIOD_TSTATES` while `Zx81Bus::nmi_generator_running` is set
 /// (which the ROM's own `OUT (0xFE)`/`OUT (0xFD)` control, verified against
 /// `roms/zx81/zx81.rom`'s actual usage -- see `bus::Zx81Bus`'s doc
@@ -60,7 +61,18 @@ pub struct Zx81 {
     /// parameter deliberately: nearly every caller (tests included) wants
     /// the default, and a setter avoids touching every existing call site.
     border: bool,
+    /// CPU cycles executed since power-on: the clock that time-stamps the MIC output's edges.
+    total_cycles: u64,
 }
+
+/// Where the ROM's `LOAD` starts reading the tape (the `CALL` that follows the name check; `LOAD` itself is at
+/// `0x0340`) and where `SAVE` begins, both verified against the real ROM's code. The machine presses Play when
+/// execution reaches the first, and starts recording the MIC output at the second -- like the user pressing the
+/// recorder's keys when the computer asks. The opcode under each is checked (`CALL`) so a custom ROM that happens to
+/// use the address for something else is left alone.
+const LOAD_ENTRY: u16 = 0x0347;
+const SAVE_ENTRY: u16 = 0x02F6;
+const CALL_OPCODE: u8 = 0xCD;
 
 impl Zx81 {
     /// `rom` is the real ZX81 ROM image (8K), supplied externally -- it's
@@ -88,7 +100,23 @@ impl Zx81 {
             region,
             nmi_cycles: 0,
             border: true,
+            total_cycles: 0,
         }
+    }
+
+    /// Installs a tape for `LOAD`, replacing any other. It starts playing when the ROM's `LOAD` asks for it.
+    pub fn load_tape(&mut self, tape: zx_tape::Tape) {
+        self.bus.load_tape(tape);
+    }
+
+    pub fn eject_tape(&mut self) {
+        self.bus.eject_tape();
+    }
+
+    /// The file the last `SAVE` put on the MIC output (name and data), read back from the recorded pulses;
+    /// `None` when no complete file was recorded.
+    pub fn recorded_tape_file(&self) -> Option<tape::Recorded> {
+        tape::decode(self.bus.mic_edges())
     }
 
     /// See the `border` field's doc comment.
@@ -257,7 +285,18 @@ impl Machine for Zx81 {
         if self.cpu.r & 0x40 == 0 {
             self.cpu.request_interrupt();
         }
+        self.bus.set_now(self.total_cycles);
+        let pc = self.cpu.pc;
+        if (pc == LOAD_ENTRY || pc == SAVE_ENTRY) && self.bus.peek(pc) == CALL_OPCODE {
+            if pc == LOAD_ENTRY {
+                self.bus.start_tape();
+            } else {
+                self.bus.begin_recording();
+            }
+        }
         let cycles = self.cpu.step(&mut self.bus);
+        self.total_cycles += u64::from(cycles);
+        self.bus.tick_tape(cycles.into());
         if self.bus.nmi_generator_running() {
             self.nmi_cycles += cycles as u32;
             if self.nmi_cycles >= NMI_PERIOD_TSTATES {
@@ -524,7 +563,7 @@ mod tests {
         assert_eq!(restored.registers(), zx81.registers());
         assert_eq!(restored.read_memory(RAM_BASE), 0x11);
         assert!(restored.bus.nmi_generator_running());
-        assert_eq!(scan_row(&mut restored, 0b1111_1011), 0b1111_1110);
+        assert_eq!(scan_row(&mut restored, 0b1111_1011), 0b0111_1110);
     }
 
     #[test]
@@ -560,7 +599,7 @@ mod tests {
         zx81.press_key(Zx81Key::Q); // row 2 (A10), bit 0
 
         // Select row 2 only: clear bit 2 of the row-select mask.
-        assert_eq!(scan_row(&mut zx81, 0b1111_1011), 0b1111_1110);
+        assert_eq!(scan_row(&mut zx81, 0b1111_1011), 0b0111_1110);
     }
 
     #[test]
@@ -569,7 +608,7 @@ mod tests {
         zx81.press_key(Zx81Key::Enter); // row 6 (A14), bit 0
         zx81.release_key(Zx81Key::Enter);
 
-        assert_eq!(scan_row(&mut zx81, 0b1011_1111), 0xFF);
+        assert_eq!(scan_row(&mut zx81, 0b1011_1111), 0x7F);
     }
 
     #[test]
@@ -580,6 +619,6 @@ mod tests {
 
         // Select rows 0 and 1 together, as the ROM does to detect
         // SHIFT-together-with-another-key.
-        assert_eq!(scan_row(&mut zx81, 0b1111_1100), 0b1111_1110);
+        assert_eq!(scan_row(&mut zx81, 0b1111_1100), 0b0111_1110);
     }
 }

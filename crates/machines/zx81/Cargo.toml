@@ -9,5 +9,6 @@ z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "577447c
 machine = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "577447c0755a69f757fb97c885345cd71922ffc8" }
 sinclair-keyboard = { path = "../../chips/sinclair-keyboard" }
 zx81-snapshot = { path = "../../formats/zx81-snapshot" }
+zx-tape = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "577447c0755a69f757fb97c885345cd71922ffc8" }
 serde = { version = "1", features = ["derive"] }
 bincode = { version = "2", features = ["serde"] }

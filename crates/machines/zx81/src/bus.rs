@@ -8,12 +8,12 @@ use crate::keyboard::Zx81Key;
 /// keyboard when the low byte's bit 0 is clear (matching real hardware,
 /// which only decodes that one bit) via a shared `sinclair_keyboard::
 /// KeyboardMatrix` -- see `keyboard::Zx81Key` for ZX81's own row/bit table.
-/// Any other port reads back `0xFF`. `write_io` decodes bit 1 of the port address
-/// for the NMI generator's start/stop control -- verified against
-/// `roms/zx81/zx81.rom`'s own usage (not generic recollection): the reset
+/// Any other port reads back `0xFF`. `write_io` decodes the address for the NMI generator's start/stop control
+/// -- verified against `roms/zx81/zx81.rom`'s own usage (not generic recollection): the reset
 /// vector at `0x0000` does `OUT (0xFD),A` (bit 1 clear -- stop) before
-/// anything else, and the display routine does `OUT (0xFE),A` (bit 1 set
-/// -- start); `crate::Zx81`'s `step` polls `nmi_generator_running` to time
+/// anything else, and the display routine does `OUT (0xFE),A` (bit 1 set, bit 0 clear
+/// -- start); `OUT (0xFF),A`, which `SAVE` does for every pulse, leaves it alone;
+/// `crate::Zx81`'s `step` polls `nmi_generator_running` to time
 /// real NMIs off it (see its doc comment for why the rate lives there, not
 /// here).
 ///
@@ -35,7 +35,18 @@ pub(crate) struct Zx81Bus {
     pub(crate) port_watch: machine::PortWatcher,
     keyboard: KeyboardMatrix,
     nmi_generator_running: bool,
+    /// The tape being played (`LOAD`), if any: its level is bit 7 of a port `0xFE` read.
+    tape: Option<zx_tape::TapePlayer>,
+    /// The MIC output latch, and the changes of it since a `SAVE` began (`(cycle, level)`), when armed.
+    mic: bool,
+    mic_edges: Vec<(u64, bool)>,
+    recording: bool,
+    /// Total CPU cycles at the start of the instruction being executed (set by `Zx81::step`), the time stamp of an edge.
+    now: u64,
 }
+
+/// Recording stops growing here (about 36 seconds of the densest signal): a `SAVE` that never ends cannot eat memory.
+const MAX_MIC_EDGES: usize = 4_000_000;
 
 /// One byte of the address space: ROM or RAM, by index into that chip.
 enum Cell {
@@ -53,6 +64,56 @@ impl Zx81Bus {
             port_watch: machine::PortWatcher::default(),
             keyboard: KeyboardMatrix::new(),
             nmi_generator_running: false,
+            tape: None,
+            mic: false,
+            mic_edges: Vec::new(),
+            recording: false,
+            now: 0,
+        }
+    }
+
+    pub(crate) fn set_now(&mut self, cycles: u64) {
+        self.now = cycles;
+    }
+
+    /// Installs a tape for `LOAD`; it sits stopped until `start_tape`.
+    pub(crate) fn load_tape(&mut self, tape: zx_tape::Tape) {
+        self.tape = Some(zx_tape::TapePlayer::new(tape));
+    }
+
+    /// Presses Play (a no-op without a tape, or once it plays or has finished).
+    pub(crate) fn start_tape(&mut self) {
+        if let Some(tape) = &mut self.tape {
+            tape.play();
+        }
+    }
+
+    pub(crate) fn eject_tape(&mut self) {
+        self.tape = None;
+    }
+
+    pub(crate) fn tick_tape(&mut self, cycles: u32) {
+        if let Some(tape) = &mut self.tape {
+            tape.tick(cycles);
+        }
+    }
+
+    /// Starts a fresh recording of the MIC output (the machine calls this as the ROM enters `SAVE`).
+    pub(crate) fn begin_recording(&mut self) {
+        self.recording = true;
+        self.mic_edges.clear();
+    }
+
+    pub(crate) fn mic_edges(&self) -> &[(u64, bool)] {
+        &self.mic_edges
+    }
+
+    fn set_mic(&mut self, level: bool) {
+        if level != self.mic {
+            self.mic = level;
+            if self.recording && self.mic_edges.len() < MAX_MIC_EDGES {
+                self.mic_edges.push((self.now, level));
+            }
         }
     }
 
@@ -174,16 +235,36 @@ impl Bus for Zx81Bus {
         }
     }
 
+    /// Port `0xFE` and its mirrors (A0 low): the keyboard rows in bits 0-4, and the tape input in bit 7 (0 =
+    /// normal, 1 = pulse; ZXDOCS "I/O Ports"). The read also starts the vertical retrace, which drives the cassette
+    /// output low -- but "in the ZX81, all of the above happens only if NMIs are disabled".
     fn read_io(&mut self, port: u16) -> u8 {
-        if port & 0x0001 == 0 {
-            self.keyboard.read(port)
-        } else {
-            0xFF
+        if port & 0x0001 != 0 {
+            return 0xFF;
         }
+        if !self.nmi_generator_running {
+            self.set_mic(false);
+        }
+        // The player idles high when stopped or finished (the Spectrum's convention); the ZX81's input idles at 0.
+        let ear = self.tape.as_ref().is_some_and(|tape| {
+            let state = tape.playback_state();
+            state.playing && !state.finished && tape.ear_bit()
+        });
+        (self.keyboard.read(port) & 0x7F) | (u8::from(ear) << 7)
     }
 
+    /// Any port write ends the vertical retrace and so drives the cassette output high -- with the NMI
+    /// generator off ("ZX80/ZX81 I/O Ports"). The generator itself is controlled by port `0xFD` (off) and `0xFE`
+    /// (on); a write to `0xFF`, which `SAVE` makes for every pulse, leaves it alone.
     fn write_io(&mut self, port: u16, _val: u8) {
-        self.nmi_generator_running = port & 0x0002 != 0;
+        if !self.nmi_generator_running {
+            self.set_mic(true);
+        }
+        if port & 0x0002 == 0 {
+            self.nmi_generator_running = false;
+        } else if port & 0x0001 == 0 {
+            self.nmi_generator_running = true;
+        }
     }
 }
 
@@ -311,5 +392,47 @@ mod tests {
         bus.write_io(0xFF02, 0x00);
 
         assert!(bus.nmi_generator_running());
+    }
+
+    #[test]
+    fn out_0xff_does_not_start_the_generator() {
+        // SAVE writes port 0xFF for every pulse with the NMI generator off; it must stay off.
+        let mut bus = test_bus();
+        bus.write_io(0x00FF, 0x00);
+
+        assert!(!bus.nmi_generator_running());
+    }
+
+    #[test]
+    fn the_tape_input_is_bit_7_of_a_port_0xfe_read() {
+        let mut bus = test_bus();
+        // No tape: 0 = normal (ZXDOCS), the idle keyboard bits stay high.
+        assert_eq!(bus.read_io(0xFEFE), 0x7F);
+        // A tape begins in silence (low) and then pulses high.
+        let pulse = |level, cycles| zx_tape::Pulse { cycles, level };
+        bus.load_tape(zx_tape::Tape::from_pulses([
+            pulse(false, 100),
+            pulse(true, 1000),
+        ]));
+        assert_eq!(bus.read_io(0xFEFE) & 0x80, 0, "stopped: normal");
+        bus.start_tape();
+        assert_eq!(bus.read_io(0xFEFE) & 0x80, 0, "playing, in the silence");
+        bus.tick_tape(150);
+        assert_eq!(bus.read_io(0xFEFE) & 0x80, 0x80, "a pulse reads 1");
+    }
+
+    #[test]
+    fn the_mic_output_follows_port_writes_and_reads_while_the_nmi_generator_is_off() {
+        let mut bus = test_bus();
+        bus.begin_recording();
+        bus.set_now(10);
+        bus.write_io(0x00FF, 0); // any write: MIC high
+        bus.set_now(20);
+        bus.read_io(0x7FFE); // a port 0xFE read: MIC low
+        bus.set_now(30);
+        bus.write_io(0x00FE, 0); // starts the NMI generator (and, with it off before, MIC high)
+        bus.set_now(40);
+        bus.read_io(0x7FFE); // generator on now: no change
+        assert_eq!(bus.mic_edges(), &[(10, true), (20, false), (30, true)]);
     }
 }

@@ -150,7 +150,7 @@ fn machine_profile() -> MachineProfile {
             MachineCapability::SaveState,
             MachineCapability::Debug,
         ],
-        media_kinds: vec![MediaKind::Snapshot],
+        media_kinds: vec![MediaKind::Snapshot, MediaKind::Tape],
         options: vec![
             MachineOptionInfo {
                 key: "rom".to_string(),
@@ -370,9 +370,33 @@ fn handle_machine_command(
             let _tape_speed = option_u32(&options, "tape_speed")
                 .or_else(|_| option_u32(&options, "speed_multiplier"))?
                 .unwrap_or(1);
+            if kind == MediaKind::Tape {
+                // A `.p` / `.81` played as the cassette signal `LOAD` reads; a `.p81` brings its own name, a
+                // nameless file gets the file's name (letters and digits) -- `LOAD ""` takes any.
+                let (tape_name, data) = match snapshot_extension(name.as_deref()).as_str() {
+                    "p" | "81" => (
+                        zx81::tape::name_from_stem(&file_stem(name.as_deref())),
+                        bytes.clone(),
+                    ),
+                    "p81" => {
+                        let snapshot =
+                            zx81_snapshot::parse_p81(&bytes).map_err(|e| e.to_string())?;
+                        (snapshot.program_name_raw.unwrap_or_default(), snapshot.data)
+                    }
+                    other => {
+                        return Err(format!(
+                            "unsupported tape file for zx81 plugin: .{other} (expected .p, .81 or .p81)"
+                        ));
+                    }
+                };
+                record
+                    .machine
+                    .load_tape(zx81::tape::encode(&tape_name, &data));
+                return Ok(MachineResponse::Ack);
+            }
             if kind != MediaKind::Snapshot {
                 return Err(format!(
-                    "unsupported media kind for zx81 plugin: {:?} (only snapshot is supported)",
+                    "unsupported media kind for zx81 plugin: {:?} (expected a snapshot or a tape)",
                     kind
                 ));
             }
@@ -394,14 +418,34 @@ fn handle_machine_command(
                 )),
             }
         }
-        MachineCommand::DetachMedia { slot } => {
-            Err(format!("detach media not implemented for slot {:?}", slot))
-        }
+        MachineCommand::DetachMedia { slot } => match slot {
+            plugin_api::MediaSlot::Tape => {
+                record.machine.eject_tape();
+                Ok(MachineResponse::Ack)
+            }
+            other => Err(format!("detach media not implemented for slot {:?}", other)),
+        },
         MachineCommand::ExportDisk { .. } | MachineCommand::MarkDiskSaved { .. } => {
             Err("unsupported: the zx81 has no writable disk".to_string())
         }
-        MachineCommand::ExportTape { .. } => {
-            Err("unsupported: the zx81 plugin does not record tape output".to_string())
+        MachineCommand::ExportTape { format } => {
+            let Some(file) = record.machine.recorded_tape_file() else {
+                return Ok(MachineResponse::TapeImage(None));
+            };
+            let image = match format.to_ascii_lowercase().as_str() {
+                "p" | "81" => file.data,
+                "p81" => zx81_snapshot::write_p81(&zx81_snapshot::Snapshot {
+                    program_name_raw: Some(file.name),
+                    data: file.data,
+                })
+                .map_err(|e| e.to_string())?,
+                other => {
+                    return Err(format!(
+                        "unsupported tape format \"{other}\" for the zx81 (expected p, 81 or p81)"
+                    ));
+                }
+            };
+            Ok(MachineResponse::TapeImage(Some(image)))
         }
         MachineCommand::Freeze
         | MachineCommand::ExportCartridge
@@ -479,6 +523,13 @@ fn handle_machine_command(
             Ok(MachineResponse::Debug(response))
         }
     }
+}
+
+/// The file name without its extension and folders (`demo` for `C:\games\demo.p`).
+fn file_stem(name: Option<&str>) -> String {
+    name.and_then(|n| std::path::Path::new(n).file_stem())
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 fn snapshot_extension(name: Option<&str>) -> String {

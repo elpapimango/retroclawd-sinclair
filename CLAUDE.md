@@ -303,8 +303,7 @@ The notes below were written in the host repository before the split and refer t
   `ZxSpectrumBus::tape: Option<zx_tape::TapePlayer>` (mirrors `ay`'s
   `Option` shape), installed via `ZxSpectrum::load_tape`/`set_tape_speed`
   (`AnyMachine::apply_tape` is the CLI-facing dispatch, same "concrete
-  per-machine concern" reasoning as `apply_snapshot` -- ZX81 has no tape
-  support modeled, parked). `read_io`'s keyboard-port branch (port `0xFE`
+  per-machine concern" reasoning as `apply_snapshot` -- the ZX81 has its own tape, see below). `read_io`'s keyboard-port branch (port `0xFE`
   and mirrors) composes bit 6 from `tape.ear_bit()` when a tape is
   installed -- verified bit layout: bit 6 = EAR input, bits 5/7 always
   read 1 (World of Spectrum 48K reference, see `CREDITS.md`); `keyboard.
@@ -397,6 +396,24 @@ The notes below were written in the host repository before the split and refer t
   best-effort" stance as `load_snapshot` — `restore_memory` itself can't
   safely detect a mismatch (applying a `Memory::Flat` payload onto banked
   memory, or vice versa, would silently do the wrong thing, not error).
+- **ZX81 tape** (2026-10-16, `zx81::tape` + `Zx81Bus`): a `.p` / `.81` / `.p81` attached as `MediaKind::Tape` becomes a
+  `zx_tape::Tape` (`tape::encode`: ZXDOCS "Cassette Signals" -- bytes MSB first, a pulse is 150 us high + 150 us low, a `0` is 4
+  pulses and a `1` is 9, each bit followed by 1300 us of silence, a 1 s leader instead of the listed 5 s, then the name with
+  bit 7 on its last byte, then the data = the `.p`; a nameless `.p` gets its file name's letters and digits, `A` if none) and
+  plays through a `TapePlayer`. Port `0xFE` reads return the level in **bit 7** (0 = normal, 1 = pulse); the player idles
+  *high* when stopped, so the bus only passes it through while the tape is playing (the Spectrum's bit 6 wants the idle-high).
+  This replaced the old "bits 5-7 always read 1": an idle port read is now `0x7F`. Play is pressed when execution reaches
+  `0x0347` (the `CALL` that starts reading, after `LOAD`'s name check at `0x0340`), the opcode checked. The MIC output is the
+  retrace latch: a write to any port sets it high and a `0xFE` read sets it low, **only while the NMI generator is off**
+  (ZXDOCS "I/O Ports"); its edges are recorded from the moment the ROM enters `SAVE` (`0x02F6`) and `tape::decode` reads the
+  file back (rising edges grouped into bursts, 4 pulses = 0, 9 = 1; the display's single retrace pulses and anything else are
+  skipped; the length comes from `E_LINE` inside the data). `ExportTape` returns `p`/`81` (the data) or `p81` (name + data);
+  `--tape-save x.p` writes it at exit and the save-tape hotkey proposes `.p`. Also fixed on the way: `write_io` started the NMI
+  generator on *any* port with bit 1 set, including `0xFF`, which `SAVE` writes for every pulse; it now follows `0xFD` (off) and
+  `0xFE` (on) only. Not saved in `.state` files (a tape position is not restored), no fast-load trap (a 16K program takes
+  minutes at the real 307 bit/s; `--tape-speed` above 1 would break the ROM's timing loop, as on the Spectrum).
+  Checked by the `rc-suite` ZX81 cases: `LOAD ""` brings a program in, `SAVE "A"` produces the described file (`.p` and `.p81`),
+  and what `SAVE` wrote loads back through the ROM.
 - **`z80-snapshot`** — parses `.z80` snapshot files (versions 1-3), per the
   World of Spectrum FAQ's format spec (see `CREDITS.md`): `parse(bytes) ->
   Result<Snapshot, Error>` returns a real `z80::Cpu` + border color +

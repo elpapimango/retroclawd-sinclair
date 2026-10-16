@@ -138,15 +138,13 @@ generated pixel by pixel from the fetch pattern.
 is that memory, `.81` equals `.p`, and loading a saved file autostarts the program again. `.p81` is not saved
 (no program name in the emulator; `rcsnap convert` adds one).
 
-### TODO (2026-10-16): ZX81 tape (found by the `rc-suite` ZX81 cases)
+### DONE (2026-10-16): ZX81 tape (found by the `rc-suite` ZX81 cases)
 
-`--tape x.p` fails with `unsupported media kind for zx81 plugin: Tape (only snapshot is supported)`, and
-`ExportTape` is unsupported too, so the ROM's `LOAD ""` / `SAVE "NAME"` never see a signal. Needed: the ZX81
-tape signal (ZXDOCS, "Cassette": pulses on the MIC output, read through bit 7 of port `0xFE`, the EAR input), a
-`.p` / `.p81` played as a tape (the name from a `.p81` header, none for a `.p`) and a recording of what `SAVE`
-writes back out as a `.p`. The suite's gap case `LOAD "" reads a program from the tape input` (`retroclawd-tools`
-`crates/rc-suite/tests/zx81.rs`) defines it; it has only ever failed on the missing media kind, so its typed
-`J""` and the 2000-frame budget are unchecked until the feature exists.
+`--tape x.p` plays a `.p` / `.81` / `.p81` as the cassette signal (ZXDOCS "Cassette Signals"), the ROM's `LOAD ""` reads it
+in, and `SAVE "NAME"` is recorded from the MIC output and written back as a `.p` / `.81` / `.p81` by `--tape-save` and the
+save-tape hotkey. Verified against the real ROM: load, save, and save-then-load. See CLAUDE.md "ZX81 tape". Open: a fast-load
+trap (real speed is ~307 bit/s, so a 16K program takes minutes), tape state in `.state` files, `.wav` / `.tzx` input for the
+ZX81, the 60 Hz bit 6 of port `0xFE` (always 1 now), ZX80 (a different file layout: no name, loads at 4000h).
 
 ### BACKLOG: external parity execution sequence (PARKED; gap vs ZEsarUX-class ZX81 emulators)
 
