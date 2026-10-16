@@ -5,15 +5,15 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 
 [dependencies]
-z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "577447c0755a69f757fb97c885345cd71922ffc8" }
-machine = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "577447c0755a69f757fb97c885345cd71922ffc8" }
+z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "318a2cc4cc1d758aeebfe2a46f962c3506a8a0cf" }
+machine = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "318a2cc4cc1d758aeebfe2a46f962c3506a8a0cf" }
 sinclair-keyboard = { path = "../../chips/sinclair-keyboard" }
 z80-snapshot = { path = "../../formats/z80-snapshot" }
 sna-snapshot = { path = "../../formats/sna-snapshot" }
 szx-snapshot = { path = "../../formats/szx-snapshot" }
-ay-3-8910 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "577447c0755a69f757fb97c885345cd71922ffc8" }
-zx-tape = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "577447c0755a69f757fb97c885345cd71922ffc8" }
-nec765 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "577447c0755a69f757fb97c885345cd71922ffc8", features = ["dsk"] }
-dsk = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "577447c0755a69f757fb97c885345cd71922ffc8" }
+ay-3-8910 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "318a2cc4cc1d758aeebfe2a46f962c3506a8a0cf" }
+zx-tape = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "318a2cc4cc1d758aeebfe2a46f962c3506a8a0cf" }
+nec765 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "318a2cc4cc1d758aeebfe2a46f962c3506a8a0cf", features = ["dsk"] }
+dsk = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "318a2cc4cc1d758aeebfe2a46f962c3506a8a0cf" }
 serde = { version = "1", features = ["derive"] }
 bincode = { version = "2", features = ["serde"] }
