@@ -177,6 +177,16 @@ fn machine_profile() -> MachineProfile {
                     "RAM installed, in K: the on-board 1K, a 2K upgrade, or a 16K/32K/48K/56K pack"
                         .to_string(),
             },
+            MachineOptionInfo {
+                key: "fast_tape_load".to_string(),
+                flag: "fast-tape-load".to_string(),
+                short: None,
+                kind: MachineOptionKind::Bool,
+                default: Some(plugin_api::DebugValue::Bool(false)),
+                required: false,
+                description: "LOAD takes the data of a tape file straight into RAM once the ROM has matched the name (the real signal is 307 bit/s)"
+                    .to_string(),
+            },
         ],
         key_names: key_names(),
     }
@@ -217,8 +227,10 @@ fn create_machine(req: MachineCreateRequest) -> Result<MachineCreateResponse, St
     }
 
     let mut ram_kb = 1usize;
+    let mut fast_tape_load = false;
     for option in &req.options {
         match (option.key.as_str(), &option.value) {
+            ("fast_tape_load", plugin_api::DebugValue::Bool(on)) => fast_tape_load = *on,
             ("ram_kb", plugin_api::DebugValue::Text(kb)) => {
                 ram_kb = kb.parse().map_err(|_| {
                     format!("option \"ram_kb\" must be a number of K, got \"{kb}\"")
@@ -237,10 +249,12 @@ fn create_machine(req: MachineCreateRequest) -> Result<MachineCreateResponse, St
         .lock()
         .map_err(|_| "plugin state mutex poisoned".to_string())?;
     let instance = state.allocate_instance();
+    let mut machine = Zx81::with_ram_kb(rom.to_vec(), region, ram_kb)?;
+    machine.set_fast_tape_load(fast_tape_load);
     state.instances.insert(
         instance,
         InstanceRecord {
-            machine: Zx81::with_ram_kb(rom.to_vec(), region, ram_kb)?,
+            machine,
             region: region_name(region).to_string(),
             paused: false,
             breakpoints: Vec::new(),
@@ -389,9 +403,7 @@ fn handle_machine_command(
                         ));
                     }
                 };
-                record
-                    .machine
-                    .load_tape(zx81::tape::encode(&tape_name, &data));
+                record.machine.load_tape_file(&tape_name, &data);
                 return Ok(MachineResponse::Ack);
             }
             if kind != MediaKind::Snapshot {
@@ -1118,5 +1130,43 @@ mod tests {
         // SAFETY: instance handle came from create response above.
         let status = unsafe { plugin_destroy_instance_v1(create.instance) };
         assert!(status.is_ok());
+    }
+
+    /// `firmware.toml` (next to the family's `Cargo.toml`) tells `--firmware auto` which file fills which machine
+    /// option. An entry naming an option this plugin does not declare as a file option can never apply: this is
+    /// exactly how the C64/C128 manifest once matched nothing (`rom_kernal` against the declared `kernal`).
+    #[test]
+    fn firmware_toml_names_only_file_options_the_plugin_declares() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../firmware.toml");
+        let text = std::fs::read_to_string(path).expect("the family's firmware.toml");
+        let manifest: toml::Value = text.parse().expect("firmware.toml is valid TOML");
+        let profiles = [machine_profile()];
+        let mut checked = 0;
+        for entry in manifest["rom"].as_array().expect("[[rom]] entries") {
+            let option = entry["option"].as_str().expect("option = \"..\"");
+            for machine in entry["machines"].as_array().expect("machines = [..]") {
+                let id = machine.as_str().expect("a machine id");
+                // Another plugin of the family serves the machines this one does not.
+                let Some(profile) = profiles.iter().find(|p| p.machine_id == id) else {
+                    continue;
+                };
+                let declared: Vec<&str> = profile
+                    .options
+                    .iter()
+                    .filter(|o| o.kind == plugin_api::MachineOptionKind::File)
+                    .map(|o| o.key.as_str())
+                    .collect();
+                assert!(
+                    declared.contains(&option),
+                    "firmware.toml: \"{}\" names option \"{option}\" for {id}, which declares the file options {declared:?}",
+                    entry["label"].as_str().unwrap_or("?")
+                );
+                checked += 1;
+            }
+        }
+        assert!(
+            checked > 0,
+            "no firmware.toml entry applies to this plugin's machines"
+        );
     }
 }

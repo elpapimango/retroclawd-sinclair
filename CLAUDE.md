@@ -410,8 +410,23 @@ The notes below were written in the host repository before the split and refer t
   skipped; the length comes from `E_LINE` inside the data). `ExportTape` returns `p`/`81` (the data) or `p81` (name + data);
   `--tape-save x.p` writes it at exit and the save-tape hotkey proposes `.p`. Also fixed on the way: `write_io` started the NMI
   generator on *any* port with bit 1 set, including `0xFF`, which `SAVE` writes for every pulse; it now follows `0xFD` (off) and
-  `0xFE` (on) only. Not saved in `.state` files (a tape position is not restored), no fast-load trap (a 16K program takes
-  minutes at the real 307 bit/s; `--tape-speed` above 1 would break the ROM's timing loop, as on the Spectrum).
+  `0xFE` (on) only. Real speed is 307 bit/s (a 16K program is minutes of signal; `--tape-speed` above 1 would break the
+  ROM's timing loop, as on the Spectrum), so there is an opt-in **fast-load trap** (`fast_tape_load` / `--fast-tape-load`,
+  `Zx81::set_fast_tape_load`, `try_fast_tape_load`): the ROM still plays the leader and matches the name from the real
+  signal, and when it reaches its data loop (`0x0375`, `INC (IY+0x15)`, opcode checked) the file kept by `load_tape_file`
+  is stored at `0x4009` (as many bytes as its own `E_LINE` says, which is where the ROM's loop would stop), `PC` is set
+  to `0x0207` (the tail of `LOAD`, which discards the loop's return address itself) and the tape is consumed. Off by
+  default; the suite loads a 2.9K program with it in well under 900 frames while the same run without it is still reading.
+  A save state keeps the tape's position, the MIC latch and the cycle count (not the pulses: attach the same file before
+  loading the state). Bit 6 of a port `0xFE` read is the refresh rate, 1 on a 50 Hz machine and 0 on a 60 Hz one (`--region
+  ntsc`): the ROM's keyboard routine at `0x02BB` turns it into the picture's top margin, 55 lines or 31. Tape files in
+  other formats (`.tzx`, `.csw`, `.voc`, `.pzx`) are not accepted for the ZX81: `zx-tape` stores their pulses in 3.5469 MHz
+  T-states and has no way to rescale them to the ZX81's 3.25 MHz yet.
+  **A real bug found by the 16K cases (2026-10-16)**: `video::decode_rows` stopped a full 32-character row without
+  consuming its NEWLINE, so the expanded display file of a machine with 3K+ RAM (24 rows of 33 bytes) decoded as every
+  other row empty and the last row, the prompt, was never shown: a 16K ZX81 drew a blank screen. Fixed, with a unit
+  test and a suite case. A 16K machine also takes about 2.4 s (120 frames) to reach its prompt (the ROM tests the RAM),
+  so type from frame 250, not 100.
   Checked by the `rc-suite` ZX81 cases: `LOAD ""` brings a program in, `SAVE "A"` produces the described file (`.p` and `.p81`),
   and what `SAVE` wrote loads back through the ROM.
 - **`z80-snapshot`** — parses `.z80` snapshot files (versions 1-3), per the

@@ -142,9 +142,22 @@ is that memory, `.81` equals `.p`, and loading a saved file autostarts the progr
 
 `--tape x.p` plays a `.p` / `.81` / `.p81` as the cassette signal (ZXDOCS "Cassette Signals"), the ROM's `LOAD ""` reads it
 in, and `SAVE "NAME"` is recorded from the MIC output and written back as a `.p` / `.81` / `.p81` by `--tape-save` and the
-save-tape hotkey. Verified against the real ROM: load, save, and save-then-load. See CLAUDE.md "ZX81 tape". Open: a fast-load
-trap (real speed is ~307 bit/s, so a 16K program takes minutes), tape state in `.state` files, `.wav` / `.tzx` input for the
-ZX81, the 60 Hz bit 6 of port `0xFE` (always 1 now), ZX80 (a different file layout: no name, loads at 4000h).
+save-tape hotkey. Verified against the real ROM: load, save, and save-then-load. Since then (same day): an opt-in
+fast-load trap (`--fast-tape-load`), the tape position in `.state` files, and the 60 Hz bit 6 of port `0xFE` (`--region
+ntsc` gets the ROM's short top margin). See CLAUDE.md "ZX81 tape". Open: `.wav` / `.tzx` / `.csw` input for the ZX81
+(`zx-tape` has no way to rescale its 3.5469 MHz pulse lengths to the ZX81's 3.25 MHz: add one in `retroclawd-crates`, then
+bump the pin), ZX80 (a different file layout: no name, loads at 4000h).
+
+### TODO (2026-10-16): Spectrum frame length (found by the `rc-suite` Spectrum cases)
+
+`ZxSpectrum::clock_hz`/`frame_hz` are 3 546 900 / 50 for every model, so the machine runs a **70 938 T-state frame** and
+raises the frame interrupt that often. The 48K is a 3.5 MHz machine with 312 lines of 224 T = **69 888** per frame (World of
+Spectrum 48K reference), the 128K/+2 has 311 lines of 228 T = **70 908** (128K reference). It shows in the cycle count of a
+frame, in how far apart interrupts are (demo and loader timing, the contention window's position against the interrupt) and
+in the pace of a real-time tape. `Machine` only has `clock_hz`/`frame_hz` (integer Hz), which cannot say 69 888 per frame at
+50.08 Hz: either a cycles-per-frame notion in the trait (a shared-crate change and ABI bump) or an effective 3 494 400 Hz
+clock for the 48K. The two gap cases in `retroclawd-tools` `crates/rc-suite/tests/spectrum.rs` (`a_48k_frame_is_69888_t_states`,
+`a_128k_frame_is_70908_t_states`) describe it and fail the run when fixed, until their `.gap(...)` markers are dropped.
 
 ### BACKLOG: external parity execution sequence (PARKED; gap vs ZEsarUX-class ZX81 emulators)
 

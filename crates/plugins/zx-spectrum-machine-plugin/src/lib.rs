@@ -1810,4 +1810,42 @@ mod tests {
         let status = unsafe { plugin_destroy_instance_v1(create.instance) };
         assert!(status.is_ok());
     }
+
+    /// `firmware.toml` (next to the family's `Cargo.toml`) tells `--firmware auto` which file fills which machine
+    /// option. An entry naming an option this plugin does not declare as a file option can never apply: this is
+    /// exactly how the C64/C128 manifest once matched nothing (`rom_kernal` against the declared `kernal`).
+    #[test]
+    fn firmware_toml_names_only_file_options_the_plugin_declares() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../firmware.toml");
+        let text = std::fs::read_to_string(path).expect("the family's firmware.toml");
+        let manifest: toml::Value = text.parse().expect("firmware.toml is valid TOML");
+        let profiles = machine_profiles();
+        let mut checked = 0;
+        for entry in manifest["rom"].as_array().expect("[[rom]] entries") {
+            let option = entry["option"].as_str().expect("option = \"..\"");
+            for machine in entry["machines"].as_array().expect("machines = [..]") {
+                let id = machine.as_str().expect("a machine id");
+                // Another plugin of the family serves the machines this one does not.
+                let Some(profile) = profiles.iter().find(|p| p.machine_id == id) else {
+                    continue;
+                };
+                let declared: Vec<&str> = profile
+                    .options
+                    .iter()
+                    .filter(|o| o.kind == plugin_api::MachineOptionKind::File)
+                    .map(|o| o.key.as_str())
+                    .collect();
+                assert!(
+                    declared.contains(&option),
+                    "firmware.toml: \"{}\" names option \"{option}\" for {id}, which declares the file options {declared:?}",
+                    entry["label"].as_str().unwrap_or("?")
+                );
+                checked += 1;
+            }
+        }
+        assert!(
+            checked > 0,
+            "no firmware.toml entry applies to this plugin's machines"
+        );
+    }
 }

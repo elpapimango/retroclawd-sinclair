@@ -14,3 +14,6 @@ plugin-api = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "
 z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "577447c0755a69f757fb97c885345cd71922ffc8" }
 zx81 = { path = "../../machines/zx81" }
 zx81-snapshot = { path = "../../formats/zx81-snapshot" }
+
+[dev-dependencies]
+toml = "0.8"

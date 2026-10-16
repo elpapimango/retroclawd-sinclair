@@ -59,6 +59,12 @@ fn decode_rows(bus: &Zx81Bus, start: u16) -> Vec<Vec<u8>> {
             }
             row.push(byte);
         }
+        // A full row of 32 characters is still followed by its NEWLINE (the expanded display file of a machine with 3K or
+        // more of RAM is 24 rows of 33 bytes): step over it, or it would be read as an empty row of its own and the
+        // picture would show only every other row, with the last one (the prompt) cut off.
+        if row.len() == COLUMNS && bus.peek(addr) == NEWLINE {
+            addr = addr.wrapping_add(1);
+        }
         rows.push(row);
     }
     rows
@@ -169,6 +175,33 @@ mod tests {
         assert_eq!(rows.len(), 24);
         assert_eq!(rows[0], vec![1]);
         assert_eq!(rows[1], Vec::<u8>::new());
+    }
+
+    #[test]
+    fn decode_rows_reads_an_expanded_display_file_of_full_rows() {
+        let mut bus = test_bus();
+        // The expanded display file: a leading NEWLINE, then 24 rows of 32 characters each followed by a NEWLINE. Row n is
+        // filled with character code n + 1 so a shifted read is easy to see; the last row holds the cursor (0xB0) first.
+        let mut d_file = vec![NEWLINE];
+        for row in 0..24u8 {
+            let mut line = vec![row + 1; 32];
+            if row == 23 {
+                line[0] = 0xB0;
+            }
+            d_file.extend(line);
+            d_file.push(NEWLINE);
+        }
+        bus.load(0x4100, &d_file);
+
+        let rows = decode_rows(&bus, 0x4100);
+
+        assert_eq!(rows.len(), 24);
+        for (n, row) in rows.iter().enumerate() {
+            assert_eq!(row.len(), 32, "row {n}");
+        }
+        assert_eq!(rows[0][0], 1);
+        assert_eq!(rows[22][0], 23);
+        assert_eq!(rows[23][0], 0xB0, "the prompt is on the last row");
     }
 
     #[test]

@@ -41,6 +41,9 @@ pub(crate) struct Zx81Bus {
     mic: bool,
     mic_edges: Vec<(u64, bool)>,
     recording: bool,
+    /// Bit 6 of a port `0xFE` read: 1 on a 50 Hz machine, 0 on a 60 Hz one. The ROM's keyboard routine (`0x02BB`) turns it
+    /// into the top margin of the picture: 55 lines when set, 31 when clear.
+    refresh_50hz: bool,
     /// Total CPU cycles at the start of the instruction being executed (set by `Zx81::step`), the time stamp of an edge.
     now: u64,
 }
@@ -68,8 +71,32 @@ impl Zx81Bus {
             mic: false,
             mic_edges: Vec::new(),
             recording: false,
+            refresh_50hz: true,
             now: 0,
         }
+    }
+
+    pub(crate) fn set_refresh_50hz(&mut self, is_50hz: bool) {
+        self.refresh_50hz = is_50hz;
+    }
+
+    pub(crate) fn tape_position(&self) -> Option<zx_tape::TapePosition> {
+        self.tape.as_ref().map(zx_tape::TapePlayer::dump_state)
+    }
+
+    /// Puts an attached tape back where a save state had it (nothing happens without a tape).
+    pub(crate) fn restore_tape_position(&mut self, position: zx_tape::TapePosition) {
+        if let Some(tape) = &mut self.tape {
+            tape.restore_state(position);
+        }
+    }
+
+    pub(crate) fn mic(&self) -> bool {
+        self.mic
+    }
+
+    pub(crate) fn restore_mic(&mut self, level: bool) {
+        self.mic = level;
     }
 
     pub(crate) fn set_now(&mut self, cycles: u64) {
@@ -235,8 +262,8 @@ impl Bus for Zx81Bus {
         }
     }
 
-    /// Port `0xFE` and its mirrors (A0 low): the keyboard rows in bits 0-4, and the tape input in bit 7 (0 =
-    /// normal, 1 = pulse; ZXDOCS "I/O Ports"). The read also starts the vertical retrace, which drives the cassette
+    /// Port `0xFE` and its mirrors (A0 low): the keyboard rows in bits 0-4, the refresh rate in bit 6 (1 = 50 Hz), and
+    /// the tape input in bit 7 (0 = normal, 1 = pulse; ZXDOCS "I/O Ports"). The read also starts the vertical retrace, which drives the cassette
     /// output low -- but "in the ZX81, all of the above happens only if NMIs are disabled".
     fn read_io(&mut self, port: u16) -> u8 {
         if port & 0x0001 != 0 {
@@ -250,7 +277,9 @@ impl Bus for Zx81Bus {
             let state = tape.playback_state();
             state.playing && !state.finished && tape.ear_bit()
         });
-        (self.keyboard.read(port) & 0x7F) | (u8::from(ear) << 7)
+        (self.keyboard.read(port) & 0x3F)
+            | (u8::from(self.refresh_50hz) << 6)
+            | (u8::from(ear) << 7)
     }
 
     /// Any port write ends the vertical retrace and so drives the cassette output high -- with the NMI
@@ -434,5 +463,13 @@ mod tests {
         bus.set_now(40);
         bus.read_io(0x7FFE); // generator on now: no change
         assert_eq!(bus.mic_edges(), &[(10, true), (20, false), (30, true)]);
+    }
+
+    #[test]
+    fn bit_6_of_a_port_0xfe_read_is_the_refresh_rate() {
+        let mut bus = test_bus();
+        assert_eq!(bus.read_io(0xFEFE), 0x7F, "50 Hz: bit 6 set");
+        bus.set_refresh_50hz(false);
+        assert_eq!(bus.read_io(0xFEFE), 0x3F, "60 Hz: bit 6 clear");
     }
 }

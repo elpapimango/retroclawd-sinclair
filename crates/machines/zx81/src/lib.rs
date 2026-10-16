@@ -63,6 +63,10 @@ pub struct Zx81 {
     border: bool,
     /// CPU cycles executed since power-on: the clock that time-stamps the MIC output's edges.
     total_cycles: u64,
+    /// The file on the attached tape, kept so the fast-load trap can place it in RAM without playing the pulses.
+    tape_file: Option<tape::Recorded>,
+    /// Whether that trap may engage (`set_fast_tape_load`). Off by default: the ROM reads the real signal.
+    fast_tape_load: bool,
 }
 
 /// Where the ROM's `LOAD` starts reading the tape (the `CALL` that follows the name check; `LOAD` itself is at
@@ -73,6 +77,15 @@ pub struct Zx81 {
 const LOAD_ENTRY: u16 = 0x0347;
 const SAVE_ENTRY: u16 = 0x02F6;
 const CALL_OPCODE: u8 = 0xCD;
+/// The first instruction of the ROM's data loop (`INC (IY+0x15)`, then `LD HL,0x4009` and the byte loop), reached once the
+/// name on the tape has matched the one asked for.
+const LOAD_DATA_ENTRY: u16 = 0x0375;
+const LOAD_DATA_ENTRY_BYTES: [u8; 3] = [0xFD, 0x34, 0x15];
+/// Where the ROM goes when the data loop has read up to `E_LINE`: the tail of the `LOAD` (display/SLOW-mode fix-up),
+/// which pops no further return address -- the one the loop's own `CALL` pushed is discarded at `0x0206`.
+const LOAD_DONE: u16 = 0x0207;
+/// Where a file's data is stored.
+const FILE_ORG: u16 = 0x4009;
 
 impl Zx81 {
     /// `rom` is the real ZX81 ROM image (8K), supplied externally -- it's
@@ -101,7 +114,16 @@ impl Zx81 {
             nmi_cycles: 0,
             border: true,
             total_cycles: 0,
+            tape_file: None,
+            fast_tape_load: false,
         }
+        .with_region_bits()
+    }
+
+    /// The machine's 50/60 Hz bit (port `0xFE` bit 6) follows its region.
+    fn with_region_bits(mut self) -> Self {
+        self.bus.set_refresh_50hz(self.region == Region::Pal);
+        self
     }
 
     /// Installs a tape for `LOAD`, replacing any other. It starts playing when the ROM's `LOAD` asks for it.
@@ -109,8 +131,61 @@ impl Zx81 {
         self.bus.load_tape(tape);
     }
 
+    /// Installs the tape a real `SAVE` of `data` under `name` would make, and remembers the file for the fast-load
+    /// trap (`set_fast_tape_load`).
+    pub fn load_tape_file(&mut self, name: &[u8], data: &[u8]) {
+        self.bus.load_tape(tape::encode(name, data));
+        self.tape_file = Some(tape::Recorded {
+            name: name.to_vec(),
+            data: data.to_vec(),
+        });
+    }
+
     pub fn eject_tape(&mut self) {
         self.bus.eject_tape();
+        self.tape_file = None;
+    }
+
+    /// Lets `LOAD` take the data of an attached tape file straight into RAM instead of reading every pulse (a 16K
+    /// program is minutes of signal at the real 307 bit/s). The ROM still plays the leader and matches the name from the
+    /// real signal; only the data bytes are skipped. Off by default.
+    pub fn set_fast_tape_load(&mut self, on: bool) {
+        self.fast_tape_load = on;
+    }
+
+    /// The trap: at the ROM's data loop, with the tape file at hand, store the file at 0x4009 (as many bytes as the file's
+    /// own `E_LINE` says, which is where the ROM's loop would stop), finish the way the loop does and rewind the "tape".
+    fn try_fast_tape_load(&mut self) {
+        let pc = self.cpu.pc;
+        if !self.fast_tape_load
+            || pc != LOAD_DATA_ENTRY
+            || (0..3).any(|i| self.bus.peek(pc + i) != LOAD_DATA_ENTRY_BYTES[usize::from(i)])
+        {
+            return;
+        }
+        let Some(file) = &self.tape_file else {
+            return;
+        };
+        let data = &file.data;
+        let e_line = match data.get(11..13) {
+            Some(&[lo, hi]) => u16::from_le_bytes([lo, hi]),
+            _ => return,
+        };
+        let Some(len) = e_line.checked_sub(FILE_ORG).map(usize::from) else {
+            return;
+        };
+        // Only when the whole file fits the installed RAM and the tape holds all of it.
+        if len == 0
+            || len > data.len()
+            || FILE_ORG as usize + len > usize::from(self.bus.ram_end()) + 1
+        {
+            return;
+        }
+        let bytes = data[..len].to_vec();
+        self.bus.load(FILE_ORG, &bytes);
+        self.cpu.pc = LOAD_DONE;
+        self.bus.eject_tape();
+        self.tape_file = None;
     }
 
     /// The file the last `SAVE` put on the MIC output (name and data), read back from the recorded pulses;
@@ -236,6 +311,9 @@ impl Zx81 {
             nmi_generator_running: self.bus.nmi_generator_running(),
             nmi_cycles: self.nmi_cycles,
             border: self.border,
+            total_cycles: self.total_cycles,
+            mic: self.bus.mic(),
+            tape: self.bus.tape_position(),
         }
     }
 
@@ -247,6 +325,11 @@ impl Zx81 {
             .set_nmi_generator_running(state.nmi_generator_running);
         self.nmi_cycles = state.nmi_cycles;
         self.border = state.border;
+        self.total_cycles = state.total_cycles;
+        self.bus.restore_mic(state.mic);
+        if let Some(position) = state.tape {
+            self.bus.restore_tape_position(position);
+        }
     }
 }
 
@@ -286,6 +369,7 @@ impl Machine for Zx81 {
             self.cpu.request_interrupt();
         }
         self.bus.set_now(self.total_cycles);
+        self.try_fast_tape_load();
         let pc = self.cpu.pc;
         if (pc == LOAD_ENTRY || pc == SAVE_ENTRY) && self.bus.peek(pc) == CALL_OPCODE {
             if pc == LOAD_ENTRY {
@@ -546,6 +630,86 @@ mod tests {
     fn save_p_snapshot_refuses_a_machine_whose_system_variables_are_unset() {
         let zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
         assert!(zx81.save_p_snapshot().unwrap_err().contains("E_LINE"));
+    }
+
+    /// A ROM with just the data loop's first instruction where the trap looks for it.
+    fn rom_with_load_data_entry() -> Vec<u8> {
+        let mut rom = vec![0; ROM_SIZE];
+        rom[usize::from(LOAD_DATA_ENTRY)..usize::from(LOAD_DATA_ENTRY) + 3]
+            .copy_from_slice(&LOAD_DATA_ENTRY_BYTES);
+        rom
+    }
+
+    /// A file of `len` bytes whose own `E_LINE` (offset 11) says so.
+    fn tape_file(len: usize) -> Vec<u8> {
+        let mut data: Vec<u8> = (0..len).map(|i| (i * 5 + 1) as u8).collect();
+        data[11..13].copy_from_slice(&(0x4009 + len as u16).to_le_bytes());
+        data
+    }
+
+    #[test]
+    fn the_fast_load_trap_stores_the_file_and_jumps_to_the_loads_tail() {
+        let mut zx81 = Zx81::with_ram_kb(rom_with_load_data_entry(), Region::Pal, 16).unwrap();
+        let data = tape_file(300);
+        zx81.load_tape_file(&[0x26 | 0x80], &data);
+        zx81.set_fast_tape_load(true);
+        zx81.set_pc(LOAD_DATA_ENTRY);
+
+        zx81.step();
+
+        for (i, byte) in data.iter().enumerate() {
+            assert_eq!(zx81.read_memory(0x4009 + i as u16), *byte, "byte {i}");
+        }
+        // The stub ROM has a NOP at the tail, so the step ran it and moved on.
+        assert_eq!(pc_of(&zx81), u64::from(LOAD_DONE + 1));
+        // The "tape" is consumed: a second pass through the loop does nothing.
+        zx81.load(0x4009, &[0; 4]);
+        zx81.set_pc(LOAD_DATA_ENTRY);
+        zx81.step();
+        assert_eq!(zx81.read_memory(0x4009), 0);
+    }
+
+    #[test]
+    fn the_fast_load_trap_stays_out_when_off_or_when_the_file_does_not_fit() {
+        let off = |fast: bool, ram_kb: usize, len: usize| {
+            let mut zx81 =
+                Zx81::with_ram_kb(rom_with_load_data_entry(), Region::Pal, ram_kb).unwrap();
+            zx81.load_tape_file(&[0x26 | 0x80], &tape_file(len));
+            zx81.set_fast_tape_load(fast);
+            zx81.set_pc(LOAD_DATA_ENTRY);
+            zx81.step();
+            zx81.read_memory(0x4009)
+        };
+        assert_eq!(off(false, 16, 300), 0, "off by default");
+        assert_eq!(
+            off(true, 1, 3000),
+            0,
+            "3000 bytes do not fit the 1K machine"
+        );
+        assert_ne!(off(true, 16, 3000), 0, "but they fit a 16K pack");
+    }
+
+    #[test]
+    fn a_save_state_puts_the_tape_back_where_it_was() {
+        let file = tape_file(200);
+        let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
+        zx81.load_tape_file(&[0x26 | 0x80], &file);
+        zx81.bus.start_tape();
+        zx81.bus.tick_tape(500_000);
+        let position = zx81.bus.tape_position().unwrap();
+        let bytes = Machine::save_state(&zx81);
+
+        let mut restored = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
+        restored.load_tape_file(&[0x26 | 0x80], &file);
+        Machine::load_state(&mut restored, &bytes).unwrap();
+
+        let encode = |p: &zx_tape::TapePosition| {
+            bincode::serde::encode_to_vec(p, bincode::config::standard()).unwrap()
+        };
+        assert_eq!(
+            encode(&restored.bus.tape_position().unwrap()),
+            encode(&position)
+        );
     }
 
     #[test]
