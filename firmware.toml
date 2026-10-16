@@ -20,6 +20,7 @@ sha1 = [
   "7b143ee964e9ada89d1f9e88f0bd48d919184cfc", # zx81.rom / zx81a.rom
   "a0ade36540561cc1691bb6f0c42ceae12484a102", # zx81-550-original.rom
   "c6d8e06cb936989f6e1cc7a56d1f092da854a515", # zx81b.rom
+  "f6764a81578b0dd8552c079e610826b0ced211ab", # zx81-550-kludge.rom
 ]
 
 [[rom]]
@@ -34,4 +35,11 @@ option = "rom"
 label = "ZX Spectrum 128K / +2 ROM (32K)"
 sha1 = ["16375d42ea109b47edded7a16028de7fdb3013a1"]
 
-# zx-spectrum-2a3 (+2A / +3) needs the 64K ROM; no dump is committed, so no hash is listed yet.
+[[rom]]
+machines = ["zx-spectrum-2a3"]
+option = "rom"
+label = "ZX Spectrum +2A / +3 ROM (64K: editor, syntax checker, +3DOS, 48K BASIC)"
+sha1 = [
+  "929bf1a5e5687ebd8d7245f9b513a596c0ec21a4", # plus3.rom
+  "500c0945760abeefcbd08bc22c0d07b14b336cf0", # plus2a.rom
+]
