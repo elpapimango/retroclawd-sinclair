@@ -145,7 +145,7 @@ in, and `SAVE "NAME"` is recorded from the MIC output and written back as a `.p`
 save-tape hotkey. Verified against the real ROM: load, save, and save-then-load. Since then (same day): an opt-in
 fast-load trap (`--fast-tape-load`), the tape position in `.state` files, and the 60 Hz bit 6 of port `0xFE` (`--region
 ntsc` gets the ROM's short top margin). See CLAUDE.md "ZX81 tape". Also: `.tzx` / `.pzx` / `.csw` / `.voc` tapes (rescaled with the new `Tape::rescaled`). `.wav` recordings too (`zx_tape::parse_wav`, rescaled like `.csw`/`.voc`; a suite case records a file at 192 kHz and loads it).
-Open: ZX80 (a different file layout: no name, loads at 4000h).
+ZX80 `.o` files (no name, 0x4000 up to `E_LINE`) parse (`zx81_snapshot::parse_o`) and are refused by name: no ZX80 is emulated (it needs its own 4K ROM).
 
 ### DONE (2026-10-16): Spectrum frame length (found by the `rc-suite` Spectrum cases)
 

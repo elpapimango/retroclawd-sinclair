@@ -406,6 +406,7 @@ fn handle_machine_command(
                             .load_tape(pulse_tape_for_zx81(&extension, &bytes)?);
                         return Ok(MachineResponse::Ack);
                     }
+                    "o" => return Err(zx80_refusal(&bytes)),
                     other => {
                         return Err(format!(
                             "unsupported tape file for zx81 plugin: .{other} (expected .p, .81, .p81, .tzx, .pzx, .csw, .voc or .wav)"
@@ -434,6 +435,7 @@ fn handle_machine_command(
                     record.machine.load_p_snapshot(snapshot);
                     Ok(MachineResponse::Ack)
                 }
+                "o" => Err(zx80_refusal(&bytes)),
                 other => Err(format!(
                     "unsupported snapshot extension for zx81 plugin: .{other} (expected .p, .p81, or .81)"
                 )),
@@ -567,6 +569,19 @@ fn file_stem(name: Option<&str>) -> String {
     name.and_then(|n| std::path::Path::new(n).file_stem())
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default()
+}
+
+/// Why a ZX80 `.o` program cannot be loaded here: it is a valid file for a machine this family does not emulate (the ZX80 has its own
+/// 4K ROM and starts at `0x4000`, and the ZX81 ROM cannot run its tokens), or not one at all.
+fn zx80_refusal(bytes: &[u8]) -> String {
+    match zx81_snapshot::parse_o(bytes) {
+        Ok(program) => format!(
+            "this is a ZX80 program (.o: {} bytes from 0x4000 up to E_LINE {:#06x}), and the zx81 plugin emulates no ZX80: its ROM cannot run the ZX80's program format",
+            program.data.len(),
+            program.e_line()
+        ),
+        Err(error) => format!("not a ZX80 .o file ({error}), and the zx81 plugin emulates no ZX80"),
+    }
 }
 
 fn snapshot_extension(name: Option<&str>) -> String {
@@ -1238,5 +1253,17 @@ mod tests {
         assert!((cycles - 3_250_000).abs() < 3_250, "wav: {cycles}");
 
         assert!(pulse_tape_for_zx81("mp3", &[]).is_err());
+    }
+
+    #[test]
+    fn a_zx80_o_file_is_named_and_refused_rather_than_loaded_as_a_zx81_program() {
+        let mut o = vec![0u8; 0x30];
+        o[0x0A..0x0C].copy_from_slice(&0x4030u16.to_le_bytes());
+        let message = zx80_refusal(&o);
+        assert!(
+            message.contains("ZX80 program") && message.contains("0x4030"),
+            "{message}"
+        );
+        assert!(zx80_refusal(&[1, 2, 3]).contains("not a ZX80 .o file"));
     }
 }

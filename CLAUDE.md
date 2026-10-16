@@ -534,3 +534,6 @@ The notes below were written in the host repository before the split and refer t
   installed RAM is an error, i.e. before the ROM has set the system variables up) and the plugin's
   `SaveSnapshot` returns it for `.p` / `.81`; `.p81` is refused (the emulator has no program name: use
   `rcsnap convert game.p game.p81 --name NAME`).
+  ZX80 `.o` (2026-10-16): `parse_o`/`write_o` -- memory from `0x4000` (the 40 bytes of ZX80 system variables) up to `E_LINE`, the word at
+  offset `0x0A`, no name, no header; a file that disagrees with its own `E_LINE` is refused. The ZX81 plugin names a valid `.o` as a ZX80
+  program and refuses it (no ZX80 is emulated); a ZX80 machine would need its own 4K ROM.
