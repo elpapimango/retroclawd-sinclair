@@ -131,6 +131,18 @@ and the maskable interrupt is asserted while bit 6 of `R` is zero. The ROM's own
 `FRAMES` counts 50 a second in SLOW mode. The picture is still decoded on demand from the display file, not
 generated pixel by pixel from the fetch pattern.
 
+### TODO (2026-10-16): save a `.p` / `.81` (found by the `rc-suite` ZX81 cases)
+
+`--dump-snapshot x.p` fails with `unsupported snapshot save extension ".p" for zx81 plugin`: loading exists
+(`Zx81::load_p_snapshot`), saving does not, so a program typed on the emulated ZX81 cannot be kept. Write the file
+ZXDOCS ("Cassette File Images / Content") describes: memory from `0x4009` up to `E_LINE`-1 (`E_LINE` at `0x4014`,
+length `E_LINE - 0x4009`, `VERSN` = 0, `NXTLIN` as it is so a saved program autostarts when loaded). `.81` is the same
+bytes; `.p81` is the same behind a name header (`zx81-snapshot` already parses it; the name has to come from the user).
+Add the writer to `zx81-snapshot` (a `Snapshot` -> bytes counterpart of `parse_p`/`parse_p81`), the plugin's snapshot-save
+path, and a load -> save -> load round-trip test. The host side is the `save_snapshot` dialog/hotkey for the extension.
+Closing it in `retroclawd-tools`: remove `.gap(...)` from `saving_a_p_file_writes_memory_from_0x4009_to_e_line`
+(`crates/rc-suite/tests/zx81.rs`); that run fails until the marker is dropped, on purpose.
+
 ### BACKLOG: external parity execution sequence (PARKED; gap vs ZEsarUX-class ZX81 emulators)
 
 If the ZX81 track is resumed, execute in this strict order (do not reorder):
