@@ -1108,9 +1108,18 @@ impl ZxSpectrum {
 }
 
 impl Machine for ZxSpectrum {
+    /// The clock that makes one host tick (`clock_hz() / frame_hz()` cycles, the frame interrupt each) exactly one real frame
+    /// of T-states: 312 lines of 224 = 69888 on the 48K, 311 lines of 228 = 70908 on the 128K/+2/+2A/+3 (World of Spectrum
+    /// 48K and 128K references). It is `T-states per frame x 50`, i.e. 3.4944 MHz and 3.5454 MHz, a little under the real
+    /// 3.5 MHz and 3.5469 MHz: `frame_hz` is a whole number of Hz and the real frame rates are 50.08 and 50.02, so the
+    /// exact frame length costs a wall-clock pace 0.16% / 0.04% slow (the beeper is that much flat). Before this every
+    /// model ran 3 546 900 / 50 = 70938 T a frame, which put the interrupts 1050 T (48K) and 30 T (128K) too far apart.
     fn clock_hz(&self) -> u64 {
         match self.region {
-            Region::Pal => 3_546_900,
+            Region::Pal => match self.model {
+                Model::Spectrum48 => 69_888 * 50,
+                Model::Spectrum128 | Model::Spectrum2A3 => 70_908 * 50,
+            },
             // Placeholder: no real Spectrum 48K variant shipped for these
             // markets -- kept equal to PAL until/unless one needs modeling.
             Region::Ntsc | Region::Japan => 3_546_900,

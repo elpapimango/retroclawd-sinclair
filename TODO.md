@@ -148,16 +148,16 @@ ntsc` gets the ROM's short top margin). See CLAUDE.md "ZX81 tape". Open: `.wav` 
 (`zx-tape` has no way to rescale its 3.5469 MHz pulse lengths to the ZX81's 3.25 MHz: add one in `retroclawd-crates`, then
 bump the pin), ZX80 (a different file layout: no name, loads at 4000h).
 
-### TODO (2026-10-16): Spectrum frame length (found by the `rc-suite` Spectrum cases)
+### DONE (2026-10-16): Spectrum frame length (found by the `rc-suite` Spectrum cases)
 
-`ZxSpectrum::clock_hz`/`frame_hz` are 3 546 900 / 50 for every model, so the machine runs a **70 938 T-state frame** and
-raises the frame interrupt that often. The 48K is a 3.5 MHz machine with 312 lines of 224 T = **69 888** per frame (World of
-Spectrum 48K reference), the 128K/+2 has 311 lines of 228 T = **70 908** (128K reference). It shows in the cycle count of a
-frame, in how far apart interrupts are (demo and loader timing, the contention window's position against the interrupt) and
-in the pace of a real-time tape. `Machine` only has `clock_hz`/`frame_hz` (integer Hz), which cannot say 69 888 per frame at
-50.08 Hz: either a cycles-per-frame notion in the trait (a shared-crate change and ABI bump) or an effective 3 494 400 Hz
-clock for the 48K. The two gap cases in `retroclawd-tools` `crates/rc-suite/tests/spectrum.rs` (`a_48k_frame_is_69888_t_states`,
-`a_128k_frame_is_70908_t_states`) describe it and fail the run when fixed, until their `.gap(...)` markers are dropped.
+`ZxSpectrum::clock_hz` is now per model: `T-states per frame x 50`, i.e. 69 888 x 50 = 3 494 400 Hz for the 48K (312 lines of 224 T)
+and 70 908 x 50 = 3 545 400 Hz for the 128K/+2/+2A/+3 (311 lines of 228 T), so the host's `clock_hz / frame_hz` tick is exactly one
+real frame and the frame interrupt comes that often (it was 70 938 T for every model). No `Machine` trait change, ABI bump or pin
+bump was needed. The price: `frame_hz` is a whole number of Hz and the real rates are 50.08 and 50.02 Hz, so wall-clock pace is
+0.16% / 0.04% slow (the beeper that much flat; it used to be 1.3% sharp on the 48K). The debugger's ZRCP `get-cpu-frequency` still
+reports the real 3 500 000 / 3 546 900. Verified by the three frame cases in `retroclawd-tools` (their gap markers are gone) with
+contention, the 128K paging cases and the smoke boot screens unchanged. If exact wall-clock pace ever matters, the way out is a
+cycles-per-frame notion in `Machine` (shared crate, ABI bump).
 
 ### BACKLOG: external parity execution sequence (PARKED; gap vs ZEsarUX-class ZX81 emulators)
 
