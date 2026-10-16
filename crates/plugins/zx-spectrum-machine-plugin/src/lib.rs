@@ -566,9 +566,10 @@ fn attach_media(
                 "pzx" => zx_tape::parse_pzx(&bytes).map_err(|e| e.to_string())?,
                 "csw" => zx_tape::parse_csw(&bytes).map_err(|e| e.to_string())?,
                 "voc" => zx_tape::parse_voc(&bytes).map_err(|e| e.to_string())?,
+                "wav" => zx_tape::parse_wav(&bytes).map_err(|e| e.to_string())?,
                 other => {
                     return Err(format!(
-                        "unsupported tape extension for zx-spectrum plugin: .{other} (expected .tap, .tzx, .cdt, .pzx, .csw, or .voc)"
+                        "unsupported tape extension for zx-spectrum plugin: .{other} (expected .tap, .tzx, .cdt, .pzx, .csw, .voc or .wav)"
                     ));
                 }
             };

@@ -420,7 +420,7 @@ The notes below were written in the host repository before the split and refer t
   A save state keeps the tape's position, the MIC latch and the cycle count (not the pulses: attach the same file before
   loading the state). Bit 6 of a port `0xFE` read is the refresh rate, 1 on a 50 Hz machine and 0 on a 60 Hz one (`--region
   ntsc`): the ROM's keyboard routine at `0x02BB` turns it into the picture's top margin, 55 lines or 31. Pulse tape
-  formats work too (2026-10-16): `.tzx` and `.pzx` (T-states of the 3.5 MHz Spectrum) and `.csw` / `.voc` (seconds, turned into cycles
+  formats work too (2026-10-16): `.tzx` and `.pzx` (T-states of the 3.5 MHz Spectrum) and `.csw` / `.voc` / `.wav` (seconds, turned into cycles
   at 3.5469 MHz by the parser) are rescaled to the ZX81's 3.25 MHz by `zx_tape::Tape::rescaled` (added to `retroclawd-crates` for
   this) in the plugin's `pulse_tape_for_zx81`, unit-tested per format (a second of signal stays a second). They play in real time
   (no file, so no fast-load trap). The ROM's loader tolerates about 8% of timing error, so a suite case cannot tell a missing rescale

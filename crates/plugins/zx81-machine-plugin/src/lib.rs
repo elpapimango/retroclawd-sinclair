@@ -399,7 +399,7 @@ fn handle_machine_command(
                     }
                     // Pulse formats: the signal itself, rescaled to the ZX81's clock. Such a tape plays through `LOAD`, but
                     // the fast-load trap (which needs the file) is off.
-                    "tzx" | "pzx" | "csw" | "voc" => {
+                    "tzx" | "pzx" | "csw" | "voc" | "wav" => {
                         let extension = snapshot_extension(name.as_deref());
                         record
                             .machine
@@ -408,7 +408,7 @@ fn handle_machine_command(
                     }
                     other => {
                         return Err(format!(
-                            "unsupported tape file for zx81 plugin: .{other} (expected .p, .81, .p81, .tzx, .pzx, .csw or .voc)"
+                            "unsupported tape file for zx81 plugin: .{other} (expected .p, .81, .p81, .tzx, .pzx, .csw, .voc or .wav)"
                         ));
                     }
                 };
@@ -546,8 +546,8 @@ fn handle_machine_command(
     }
 }
 
-/// A `.tzx` / `.pzx` / `.csw` / `.voc` as the ZX81 hears it. The parsers give pulse lengths in the Spectrum's domain --
-/// `.tzx` and `.pzx` count T-states of the 3.5 MHz Spectrum, `.csw` and `.voc` turn seconds into cycles at 3.5469 MHz -- and
+/// A `.tzx` / `.pzx` / `.csw` / `.voc` / `.wav` as the ZX81 hears it. The parsers give pulse lengths in the Spectrum's domain --
+/// `.tzx` and `.pzx` count T-states of the 3.5 MHz Spectrum, `.csw`, `.voc` and `.wav` turn seconds into cycles at 3.5469 MHz -- and
 /// the ZX81's CPU runs at 3.25 MHz, so the tape is rescaled (a second of signal must stay a second of signal).
 fn pulse_tape_for_zx81(extension: &str, bytes: &[u8]) -> Result<zx_tape::Tape, String> {
     const ZX81_HZ: u64 = 3_250_000;
@@ -556,6 +556,7 @@ fn pulse_tape_for_zx81(extension: &str, bytes: &[u8]) -> Result<zx_tape::Tape, S
         "pzx" => (zx_tape::parse_pzx(bytes), 3_500_000),
         "csw" => (zx_tape::parse_csw(bytes), 3_546_900),
         "voc" => (zx_tape::parse_voc(bytes), 3_546_900),
+        "wav" => (zx_tape::parse_wav(bytes), 3_546_900),
         other => return Err(format!("not a pulse tape format: .{other}")),
     };
     Ok(tape.map_err(|e| e.to_string())?.rescaled(from_hz, ZX81_HZ))
@@ -1220,6 +1221,22 @@ mod tests {
         let cycles = tape.total_cycles() as i64;
         assert!((cycles - 3_250_000).abs() < 32_500, "voc: {cycles}");
 
-        assert!(pulse_tape_for_zx81("wav", &[]).is_err());
+        // A .wav of one second (a half second high, a half low at 10 kHz, 16-bit) is read in the same domain as a .voc.
+        let samples: Vec<u8> = (0..10_000)
+            .flat_map(|i| (if i < 5_000 { 20_000i16 } else { -20_000i16 }).to_le_bytes())
+            .collect();
+        let mut wav = b"RIFF".to_vec();
+        wav.extend_from_slice(&(36 + samples.len() as u32).to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt      ");
+        wav.extend_from_slice(&10_000u32.to_le_bytes());
+        wav.extend_from_slice(&20_000u32.to_le_bytes());
+        wav.extend_from_slice(&[2, 0, 16, 0]);
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&(samples.len() as u32).to_le_bytes());
+        wav.extend_from_slice(&samples);
+        let cycles = pulse_tape_for_zx81("wav", &wav).unwrap().total_cycles() as i64;
+        assert!((cycles - 3_250_000).abs() < 3_250, "wav: {cycles}");
+
+        assert!(pulse_tape_for_zx81("mp3", &[]).is_err());
     }
 }
