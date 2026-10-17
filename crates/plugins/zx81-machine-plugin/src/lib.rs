@@ -37,7 +37,7 @@ fn bitmap_defaults() -> BitmapExplorerDefaults {
         zoom: 3,
     }
 }
-const PLUGIN_VERSION: &[u8] = env!("CARGO_PKG_VERSION").as_bytes();
+const PLUGIN_VERSION: &[u8] = build_info::version_tag!().as_bytes();
 
 const fn static_slice(bytes: &'static [u8]) -> RcSlice {
     RcSlice {
