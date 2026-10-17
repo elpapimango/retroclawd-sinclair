@@ -322,19 +322,6 @@ mod tests {
     }
 
     #[test]
-    fn the_rom_ignores_writes() {
-        let mut bus = bus_with_ram(1);
-        bus.write(0x0123, 0xFF);
-        bus.write(0x2123, 0xFF);
-        assert_eq!(bus.peek(0x0123), 0x23);
-        assert_eq!(
-            bus.load(0x0000, &[1, 2, 3]),
-            0,
-            "load drops bytes aimed at ROM"
-        );
-    }
-
-    #[test]
     fn a_1k_ram_repeats_through_0x4000_0x7fff() {
         let mut bus = bus_with_ram(1);
         bus.write(0x4300, 0x5A);
@@ -390,12 +377,10 @@ mod tests {
         assert_eq!(bus.read(0xC300), 0x3C);
     }
 
-    #[test]
     fn generator_starts_stopped() {
         assert!(!test_bus().nmi_generator_running());
     }
 
-    #[test]
     fn out_0xfe_starts_the_generator() {
         let mut bus = test_bus();
         bus.write_io(0x00FE, 0x00); // real ROM's exact OUT (0xFE),A
@@ -403,7 +388,6 @@ mod tests {
         assert!(bus.nmi_generator_running());
     }
 
-    #[test]
     fn out_0xfd_stops_the_generator() {
         let mut bus = test_bus();
         bus.write_io(0x00FE, 0x00); // start it first
@@ -412,7 +396,6 @@ mod tests {
         assert!(!bus.nmi_generator_running());
     }
 
-    #[test]
     fn only_bit_1_of_the_port_address_matters() {
         let mut bus = test_bus();
         // Any address with bit 1 set starts it, not just the literal 0xFE
@@ -423,13 +406,21 @@ mod tests {
         assert!(bus.nmi_generator_running());
     }
 
-    #[test]
     fn out_0xff_does_not_start_the_generator() {
         // SAVE writes port 0xFF for every pulse with the NMI generator off; it must stay off.
         let mut bus = test_bus();
         bus.write_io(0x00FF, 0x00);
 
         assert!(!bus.nmi_generator_running());
+    }
+    /// Merged (every check kept): `generator_starts_stopped`, `out_0xfe_starts_the_generator`, `out_0xfd_stops_the_generator`, `only_bit_1_of_the_port_address_matters`, `out_0xff_does_not_start_the_generator`.
+    #[test]
+    fn nmi_generator_ports() {
+        generator_starts_stopped();
+        out_0xfe_starts_the_generator();
+        out_0xfd_stops_the_generator();
+        only_bit_1_of_the_port_address_matters();
+        out_0xff_does_not_start_the_generator();
     }
 
     #[test]

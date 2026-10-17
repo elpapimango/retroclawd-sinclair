@@ -695,7 +695,6 @@ mod tests {
         bytes
     }
 
-    #[test]
     fn parses_v1_registers() {
         let mut bytes = v1_header(0x8000, 0);
         bytes.extend(vec![0u8; 0xC000]); // uncompressed 48K
@@ -706,7 +705,6 @@ mod tests {
         assert_eq!(snap.paging, None);
     }
 
-    #[test]
     fn v1_uncompressed_memory_lands_at_0x4000() {
         let mut bytes = v1_header(0x8000, 0);
         let mut mem = vec![0xAAu8; 0xC000];
@@ -729,7 +727,6 @@ mod tests {
         );
     }
 
-    #[test]
     fn v1_compressed_run_expands_and_stops_at_end_marker() {
         let mut bytes = v1_header(0x8000, 0b0010_0000); // compression bit set
         // A run of 10 copies of 0x42, then the end marker.
@@ -744,7 +741,6 @@ mod tests {
         }
     }
 
-    #[test]
     fn byte_12_value_255_is_treated_as_1_not_compressed() {
         let mut bytes = v1_header(0x8000, 255);
         bytes.extend(vec![0x07u8; 0xC000]); // must be read literally, not decompressed
@@ -756,6 +752,14 @@ mod tests {
         }
         assert_eq!(snap.border_color, 0); // byte 1 -> border bits (1>>1)&7 = 0
     }
+    /// Merged (every check kept): `parses_v1_registers`, `v1_uncompressed_memory_lands_at_0x4000`, `v1_compressed_run_expands_and_stops_at_end_marker`, `byte_12_value_255_is_treated_as_1_not_compressed`.
+    #[test]
+    fn v1_parsing() {
+        parses_v1_registers();
+        v1_uncompressed_memory_lands_at_0x4000();
+        v1_compressed_run_expands_and_stops_at_end_marker();
+        byte_12_value_255_is_treated_as_1_not_compressed();
+    }
 
     #[test]
     fn pc_zero_selects_v2_v3_path_using_additional_header_pc() {
@@ -766,14 +770,12 @@ mod tests {
         assert_eq!(snap.cpu.pc, 0x9000);
     }
 
-    #[test]
     fn unsupported_hardware_mode_is_rejected() {
         let bytes = v2_v3_header(0x9000, 0, 23, 2, 0); // v2, SamRam
 
         assert_eq!(parse(&bytes), Err(Error::UnsupportedHardwareMode(2)));
     }
 
-    #[test]
     fn v2_mode_3_is_128k_but_v3_mode_3_is_48k() {
         // This is the exact trap the format's own numbering sets: mode 3
         // means different hardware depending on version. Regression guard
@@ -786,7 +788,6 @@ mod tests {
         assert_eq!(parse(&v3_mode_3).unwrap().paging, None);
     }
 
-    #[test]
     fn v3_128k_modes_are_accepted() {
         for mode in [4u8, 5, 6] {
             let bytes = v2_v3_header(0x9000, 0, 54, mode, 0);
@@ -797,7 +798,6 @@ mod tests {
         }
     }
 
-    #[test]
     fn spectrum_plus_2_is_treated_as_128k_in_both_versions() {
         assert!(
             parse(&v2_v3_header(0x9000, 0, 23, 12, 0))
@@ -813,7 +813,6 @@ mod tests {
         );
     }
 
-    #[test]
     fn port_state_decodes_into_paging_state() {
         // ram_bank=5 (0b101), shadow_screen=1 (bit3), rom_bank=1 (bit4),
         // locked=1 (bit5): 0b00111101.
@@ -827,7 +826,6 @@ mod tests {
         assert!(paging.locked);
     }
 
-    #[test]
     fn v2_page_blocks_map_to_real_addresses() {
         let mut bytes = v2_v3_header(0x9000, 0, 23, 0, 0);
 
@@ -867,7 +865,6 @@ mod tests {
         }
     }
 
-    #[test]
     fn v2_128k_page_blocks_map_to_ram_banks() {
         let mut bytes = v2_v3_header(0x9000, 0, 23, 3, 0);
 
@@ -896,7 +893,6 @@ mod tests {
         ));
     }
 
-    #[test]
     fn unmapped_page_numbers_are_skipped_not_errored() {
         let mut bytes = v2_v3_header(0x9000, 0, 23, 0, 0);
 
@@ -910,7 +906,6 @@ mod tests {
         assert!(snap.memory.is_empty());
     }
 
-    #[test]
     fn too_short_is_rejected() {
         assert_eq!(parse(&[0u8; 10]), Err(Error::TooShort));
     }
@@ -928,7 +923,6 @@ mod tests {
         bytes
     }
 
-    #[test]
     fn spectrum_plus_3_and_plus_2a_modes_are_accepted() {
         for mode in [7u8, 13] {
             let bytes = v3_2a3_header(0x9000, mode, 0, 0);
@@ -940,15 +934,28 @@ mod tests {
             assert!(snap.paging_2a3.is_some(), "mode {mode} should be +2A/+3");
         }
     }
-
+    /// Merged (every check kept): `v2_mode_3_is_128k_but_v3_mode_3_is_48k`, `v3_128k_modes_are_accepted`, `spectrum_plus_2_is_treated_as_128k_in_both_versions`, `spectrum_plus_3_and_plus_2a_modes_are_accepted`.
     #[test]
+    fn hardware_modes() {
+        v2_mode_3_is_128k_but_v3_mode_3_is_48k();
+        v3_128k_modes_are_accepted();
+        spectrum_plus_2_is_treated_as_128k_in_both_versions();
+        spectrum_plus_3_and_plus_2a_modes_are_accepted();
+    }
+
     fn plus_3_mode_with_short_header_is_rejected() {
         // Mode 7 claimed, but only a 54-byte header -- no byte 86 available.
         let bytes = v2_v3_header(0x9000, 0, 54, 7, 0);
         assert_eq!(parse(&bytes), Err(Error::Missing2A3PagingByte));
     }
-
+    /// Merged (every check kept): `unsupported_hardware_mode_is_rejected`, `plus_3_mode_with_short_header_is_rejected`, `too_short_is_rejected`.
     #[test]
+    fn z80_rejections() {
+        unsupported_hardware_mode_is_rejected();
+        plus_3_mode_with_short_header_is_rejected();
+        too_short_is_rejected();
+    }
+
     fn port_1ffd_decodes_into_paging_2a3_state() {
         // port_7ffd: ram_bank=5 (0b101), shadow_screen=1 (bit3),
         // rom_bit_lo=1 (bit4), locked=1 (bit5): 0b0011_1101.
@@ -966,8 +973,13 @@ mod tests {
         assert_eq!(paging.bits_1_2, 0b10);
         assert!(paging.disk_motor);
     }
-
+    /// Merged (every check kept): `port_state_decodes_into_paging_state`, `port_1ffd_decodes_into_paging_2a3_state`.
     #[test]
+    fn paging_port_decoding() {
+        port_state_decodes_into_paging_state();
+        port_1ffd_decodes_into_paging_2a3_state();
+    }
+
     fn v3_2a3_page_blocks_map_to_ram_banks() {
         let mut bytes = v3_2a3_header(0x9000, 7, 0, 0);
 
@@ -985,6 +997,14 @@ mod tests {
             MemoryBlock::RamBank { bank: 0, data } => assert_eq!(data[0], 0xCD),
             other => panic!("expected RamBank 0, got {other:?}"),
         }
+    }
+    /// Merged (every check kept): `v2_page_blocks_map_to_real_addresses`, `v2_128k_page_blocks_map_to_ram_banks`, `v3_2a3_page_blocks_map_to_ram_banks`, `unmapped_page_numbers_are_skipped_not_errored`.
+    #[test]
+    fn page_blocks() {
+        v2_page_blocks_map_to_real_addresses();
+        v2_128k_page_blocks_map_to_ram_banks();
+        v3_2a3_page_blocks_map_to_ram_banks();
+        unmapped_page_numbers_are_skipped_not_errored();
     }
 
     fn sample_cpu() -> Cpu {
@@ -1077,7 +1097,6 @@ mod tests {
         assert_eq!(get(0xC000), 0xCC);
     }
 
-    #[test]
     fn write_48k_rejects_incomplete_ram() {
         let snapshot = Snapshot {
             cpu: Cpu::new(),
@@ -1120,7 +1139,6 @@ mod tests {
         assert_eq!(round_tripped, original);
     }
 
-    #[test]
     fn write_128k_rejects_a_missing_bank() {
         let snapshot = Snapshot {
             cpu: Cpu::new(),
@@ -1136,6 +1154,12 @@ mod tests {
         };
 
         assert_eq!(write(&snapshot), Err(WriteError::MissingRamBank(0)));
+    }
+    /// Merged (every check kept): `write_48k_rejects_incomplete_ram`, `write_128k_rejects_a_missing_bank`.
+    #[test]
+    fn write_rejections() {
+        write_48k_rejects_incomplete_ram();
+        write_128k_rejects_a_missing_bank();
     }
 
     #[test]

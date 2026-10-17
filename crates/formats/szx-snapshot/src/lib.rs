@@ -606,23 +606,19 @@ mod tests {
         bytes
     }
 
-    #[test]
     fn parse_rejects_a_file_without_the_signature() {
         assert_eq!(parse(b"NOPE0000"), Err(Error::WrongSignature));
     }
 
-    #[test]
     fn parse_rejects_a_file_shorter_than_the_header() {
         assert_eq!(parse(b"ZX"), Err(Error::TooShort));
     }
 
-    #[test]
     fn parse_rejects_an_unsupported_machine_id() {
         // 9 = SZX_MACHINE_TC2068, a real id this crate doesn't model.
         assert_eq!(parse(&minimal_header(9)), Err(Error::UnsupportedMachine(9)));
     }
 
-    #[test]
     fn parse_a_bare_header_with_no_chunks_is_a_default_48k_snapshot() {
         let snapshot = parse(&minimal_header(1)).unwrap();
         assert_eq!(snapshot.paging, None);
@@ -630,7 +626,6 @@ mod tests {
         assert!(snapshot.memory.is_empty());
     }
 
-    #[test]
     fn parse_skips_an_unrecognized_chunk_by_its_own_length() {
         let mut bytes = minimal_header(1);
         bytes.extend_from_slice(b"CRTR");
@@ -639,8 +634,13 @@ mod tests {
         let snapshot = parse(&bytes).unwrap();
         assert!(snapshot.memory.is_empty());
     }
-
+    /// Merged (every check kept): `parse_a_bare_header_with_no_chunks_is_a_default_48k_snapshot`, `parse_skips_an_unrecognized_chunk_by_its_own_length`.
     #[test]
+    fn szx_header_and_unknown_chunks() {
+        parse_a_bare_header_with_no_chunks_is_a_default_48k_snapshot();
+        parse_skips_an_unrecognized_chunk_by_its_own_length();
+    }
+
     fn parse_rejects_a_chunk_whose_length_overruns_the_file() {
         let mut bytes = minimal_header(1);
         bytes.extend_from_slice(b"Z80R");
@@ -655,7 +655,6 @@ mod tests {
         data
     }
 
-    #[test]
     fn z80r_chunk_restores_registers_and_halted_flag() {
         let mut bytes = minimal_header(1);
         bytes.extend_from_slice(b"Z80R");
@@ -668,7 +667,6 @@ mod tests {
         assert!(snapshot.cpu.halted);
     }
 
-    #[test]
     fn z80r_chunk_rejects_the_wrong_length() {
         let mut bytes = minimal_header(1);
         bytes.extend_from_slice(b"Z80R");
@@ -676,8 +674,16 @@ mod tests {
         bytes.extend_from_slice(&[0u8; 10]);
         assert_eq!(parse(&bytes), Err(Error::WrongZ80RegsLength(10)));
     }
-
+    /// Merged (every check kept): `parse_rejects_a_file_without_the_signature`, `parse_rejects_a_file_shorter_than_the_header`, `parse_rejects_an_unsupported_machine_id`, `parse_rejects_a_chunk_whose_length_overruns_the_file`, `z80r_chunk_rejects_the_wrong_length`.
     #[test]
+    fn szx_rejections() {
+        parse_rejects_a_file_without_the_signature();
+        parse_rejects_a_file_shorter_than_the_header();
+        parse_rejects_an_unsupported_machine_id();
+        parse_rejects_a_chunk_whose_length_overruns_the_file();
+        z80r_chunk_rejects_the_wrong_length();
+    }
+
     fn spcr_chunk_decodes_128k_paging_and_border() {
         let mut bytes = minimal_header(2); // 128K
         bytes.extend_from_slice(b"SPCR");
@@ -707,7 +713,6 @@ mod tests {
         );
     }
 
-    #[test]
     fn spcr_chunk_decodes_2a3_paging_from_both_ports() {
         let mut bytes = minimal_header(5); // +3
         bytes.extend_from_slice(b"SPCR");
@@ -739,7 +744,6 @@ mod tests {
         );
     }
 
-    #[test]
     fn ramp_chunk_uncompressed_48k_page_maps_to_its_real_address() {
         let mut bytes = minimal_header(1); // 48K
         bytes.extend_from_slice(b"RAMP");
@@ -761,7 +765,6 @@ mod tests {
         }
     }
 
-    #[test]
     fn ramp_chunk_128k_page_is_a_direct_bank_index() {
         let mut bytes = minimal_header(2); // 128K
         bytes.extend_from_slice(b"RAMP");
@@ -781,7 +784,6 @@ mod tests {
         }
     }
 
-    #[test]
     fn ramp_chunk_decompresses_a_real_zlib_stream() {
         use std::io::Write;
         let raw = vec![0x99u8; 0x4000];
@@ -808,8 +810,14 @@ mod tests {
             other => panic!("expected Absolute, got {other:?}"),
         }
     }
-
+    /// Merged (every check kept): `ramp_chunk_uncompressed_48k_page_maps_to_its_real_address`, `ramp_chunk_128k_page_is_a_direct_bank_index`, `ramp_chunk_decompresses_a_real_zlib_stream`.
     #[test]
+    fn szx_ramp_chunks() {
+        ramp_chunk_uncompressed_48k_page_maps_to_its_real_address();
+        ramp_chunk_128k_page_is_a_direct_bank_index();
+        ramp_chunk_decompresses_a_real_zlib_stream();
+    }
+
     fn ay_chunk_restores_registers_and_current_selection() {
         let mut bytes = minimal_header(2);
         bytes.extend_from_slice(b"AY\0\0");
@@ -827,8 +835,15 @@ mod tests {
             [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
         );
     }
-
+    /// Merged (every check kept): `z80r_chunk_restores_registers_and_halted_flag`, `spcr_chunk_decodes_128k_paging_and_border`, `spcr_chunk_decodes_2a3_paging_from_both_ports`, `ay_chunk_restores_registers_and_current_selection`.
     #[test]
+    fn szx_register_chunks() {
+        z80r_chunk_restores_registers_and_halted_flag();
+        spcr_chunk_decodes_128k_paging_and_border();
+        spcr_chunk_decodes_2a3_paging_from_both_ports();
+        ay_chunk_restores_registers_and_current_selection();
+    }
+
     fn write_then_parse_round_trips_a_48k_snapshot() {
         let mut cpu = Cpu::new();
         cpu.pc = 0x1234;
@@ -871,7 +886,6 @@ mod tests {
         assert_eq!(round_tripped.paging_2a3, None);
     }
 
-    #[test]
     fn write_then_parse_round_trips_a_128k_snapshot_with_paging_and_ay() {
         let snapshot = Snapshot {
             cpu: Cpu::new(),
@@ -903,7 +917,6 @@ mod tests {
         assert_eq!(round_tripped.ay, snapshot.ay);
     }
 
-    #[test]
     fn write_then_parse_round_trips_a_2a3_snapshot() {
         let snapshot = Snapshot {
             cpu: Cpu::new(),
@@ -931,5 +944,12 @@ mod tests {
         let round_tripped = parse(&bytes).unwrap();
 
         assert_eq!(round_tripped.paging_2a3, snapshot.paging_2a3);
+    }
+    /// Merged (every check kept): `write_then_parse_round_trips_a_48k_snapshot`, `write_then_parse_round_trips_a_128k_snapshot_with_paging_and_ay`, `write_then_parse_round_trips_a_2a3_snapshot`.
+    #[test]
+    fn szx_round_trips() {
+        write_then_parse_round_trips_a_48k_snapshot();
+        write_then_parse_round_trips_a_128k_snapshot_with_paging_and_ay();
+        write_then_parse_round_trips_a_2a3_snapshot();
     }
 }

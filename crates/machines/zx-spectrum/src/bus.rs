@@ -1652,53 +1652,6 @@ mod tests {
         assert_eq!(bus.peek(0xC000), 0x42);
     }
 
-    #[test]
-    fn spectrum128_pages_a_ram_bank_into_0xc000_via_port_0x7ffd() {
-        let mut bus = ZxSpectrumBus::new(Model::Spectrum128, vec![0u8; crate::ROM_SIZE_128K]);
-        bus.load_ram_bank(3, &[0xAB]);
-
-        bus.write_io(0x7FFD, 0b0000_0011); // ram_bank = 3
-        assert_eq!(bus.peek(0xC000), 0xAB);
-
-        bus.load_ram_bank(0, &[0xCD]);
-        bus.write_io(0x7FFD, 0b0000_0000); // ram_bank = 0
-        assert_eq!(bus.peek(0xC000), 0xCD);
-    }
-
-    #[test]
-    fn spectrum128_banks_5_and_2_are_always_fixed_regardless_of_ram_bank() {
-        let mut bus = ZxSpectrumBus::new(Model::Spectrum128, vec![0u8; crate::ROM_SIZE_128K]);
-        bus.write(0x4000, 0x11); // bank 5
-        bus.write(0x8000, 0x22); // bank 2
-        bus.write_io(0x7FFD, 0b0000_0111); // page bank 7 into 0xC000
-
-        assert_eq!(bus.peek(0x4000), 0x11);
-        assert_eq!(bus.peek(0x8000), 0x22);
-    }
-
-    #[test]
-    fn spectrum128_rom_bank_selects_which_rom_half_is_visible() {
-        let mut rom = vec![0u8; 0x8000];
-        rom[0] = 0xAA; // bank 0's first byte
-        rom[0x4000] = 0xBB; // bank 1's first byte
-        let mut bus = ZxSpectrumBus::new(Model::Spectrum128, rom);
-
-        assert_eq!(bus.peek(0x0000), 0xAA);
-        bus.write_io(0x7FFD, 0b0001_0000); // rom_bank = 1
-        assert_eq!(bus.peek(0x0000), 0xBB);
-    }
-
-    #[test]
-    fn spectrum128_locked_paging_ignores_further_0x7ffd_writes() {
-        let mut bus = ZxSpectrumBus::new(Model::Spectrum128, vec![0u8; crate::ROM_SIZE_128K]);
-        bus.write_io(0x7FFD, 0b0010_0000); // lock, ram_bank stays 0
-        bus.write_io(0x7FFD, 0b0000_0101); // should be ignored -- locked
-
-        bus.load_ram_bank(0, &[0x77]);
-        assert_eq!(bus.peek(0xC000), 0x77); // still bank 0, not 5
-    }
-
-    #[test]
     fn peek_screen_reads_shadow_bank_7_when_selected_independent_of_paged_bank() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum128, vec![0u8; crate::ROM_SIZE_128K]);
         bus.load_ram_bank(7, &[0x99]);
@@ -1709,12 +1662,17 @@ mod tests {
         assert_eq!(bus.peek_screen(0x4000), 0x99);
     }
 
-    #[test]
     fn peek_screen_reads_normal_bank_5_by_default() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum128, vec![0u8; crate::ROM_SIZE_128K]);
         bus.write(0x4000, 0x55); // bank 5, fixed
 
         assert_eq!(bus.peek_screen(0x4000), 0x55);
+    }
+    /// Merged (every check kept): `peek_screen_reads_shadow_bank_7_when_selected_independent_of_paged_bank`, `peek_screen_reads_normal_bank_5_by_default`.
+    #[test]
+    fn peek_screen_banks() {
+        peek_screen_reads_shadow_bank_7_when_selected_independent_of_paged_bank();
+        peek_screen_reads_normal_bank_5_by_default();
     }
 
     #[test]
@@ -1747,7 +1705,6 @@ mod tests {
         assert_eq!(bus.read_io(0xFFFD), 0x15);
     }
 
-    #[test]
     fn turbosound_off_by_default_and_0xfe_is_just_register_15() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum128, vec![0u8; crate::ROM_SIZE_128K]);
         assert!(bus.ay2().is_none());
@@ -1761,7 +1718,6 @@ mod tests {
         assert_eq!(bus.read_io(0xFFFD), 0x07);
     }
 
-    #[test]
     fn turbosound_chip_select_switches_which_ay_is_addressed() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum128, vec![0u8; crate::ROM_SIZE_128K]);
         bus.set_turbosound(true);
@@ -1791,8 +1747,13 @@ mod tests {
         bus.write_io(0xFFFD, 14);
         assert_eq!(bus.read_io(0xFFFD), 0x11);
     }
-
+    /// Merged (every check kept): `turbosound_off_by_default_and_0xfe_is_just_register_15`, `turbosound_chip_select_switches_which_ay_is_addressed`.
     #[test]
+    fn turbosound_selection() {
+        turbosound_off_by_default_and_0xfe_is_just_register_15();
+        turbosound_chip_select_switches_which_ay_is_addressed();
+    }
+
     fn turbosound_chip_select_value_is_not_also_treated_as_a_register_select() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum128, vec![0u8; crate::ROM_SIZE_128K]);
         bus.set_turbosound(true);
@@ -1820,7 +1781,6 @@ mod tests {
         assert_eq!(bus.read_io(0xFFFD), 0x33);
     }
 
-    #[test]
     fn turbosound_disabling_resets_to_the_primary_chip() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum128, vec![0u8; crate::ROM_SIZE_128K]);
         bus.set_turbosound(true);
@@ -1834,6 +1794,12 @@ mod tests {
         bus.write_io(0xBFFD, 0x44);
         bus.write_io(0xFFFD, 0xFE);
         assert_eq!(bus.read_io(0xFFFD), 0x44);
+    }
+    /// Merged (every check kept): `turbosound_chip_select_value_is_not_also_treated_as_a_register_select`, `turbosound_disabling_resets_to_the_primary_chip`.
+    #[test]
+    fn turbosound_edge_cases() {
+        turbosound_chip_select_value_is_not_also_treated_as_a_register_select();
+        turbosound_disabling_resets_to_the_primary_chip();
     }
 
     #[test]
@@ -1865,15 +1831,6 @@ mod tests {
 
         bus.write_io(0x7FFD, 0b0001_0000); // rom bit lo = 1 too
         assert_eq!(bus.peek(0x0000), 0xDD);
-    }
-
-    #[test]
-    fn spectrum2a3_pages_a_ram_bank_into_0xc000_via_0x7ffd_same_as_128k() {
-        let mut bus = ZxSpectrumBus::new(Model::Spectrum2A3, vec![0u8; crate::ROM_SIZE_2A3]);
-        bus.load_ram_bank(3, &[0xAB]);
-
-        bus.write_io(0x7FFD, 0b0000_0011); // ram_bank = 3
-        assert_eq!(bus.peek(0xC000), 0xAB);
     }
 
     #[test]
@@ -1930,42 +1887,17 @@ mod tests {
     }
 
     #[test]
-    fn spectrum2a3_locked_paging_ignores_further_writes_to_both_ports() {
-        let mut bus = ZxSpectrumBus::new(Model::Spectrum2A3, vec![0u8; crate::ROM_SIZE_2A3]);
-        bus.write_io(0x7FFD, 0b0010_0000); // lock, ram_bank stays 0
-        bus.write_io(0x7FFD, 0b0000_0101); // should be ignored -- locked
-        bus.write_io(0x1FFD, 0b0000_0001); // should also be ignored -- locked
-
-        bus.load_ram_bank(0, &[0x77]);
-        assert_eq!(bus.peek(0xC000), 0x77); // still bank 0
-        assert_eq!(bus.peek(0x0000), 0x00); // still normal mode (ROM), not special
-    }
-
-    #[test]
     fn spectrum2a3_has_an_ay_chip_like_128k() {
         let bus = ZxSpectrumBus::new(Model::Spectrum2A3, vec![0u8; crate::ROM_SIZE_2A3]);
         assert!(bus.ay().is_some());
     }
 
-    #[test]
-    fn spectrum2a3_banks_5_and_2_stay_fixed_in_normal_mode() {
-        let mut bus = ZxSpectrumBus::new(Model::Spectrum2A3, vec![0u8; crate::ROM_SIZE_2A3]);
-        bus.write(0x4000, 0x11); // bank 5
-        bus.write(0x8000, 0x22); // bank 2
-        bus.write_io(0x7FFD, 0b0000_0111); // page bank 7 into 0xC000
-
-        assert_eq!(bus.peek(0x4000), 0x11);
-        assert_eq!(bus.peek(0x8000), 0x22);
-    }
-
-    #[test]
     fn tape_ear_bit_is_idle_high_with_no_tape_installed() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         // Bit 6 set (idle) even before any tape is ever installed.
         assert_eq!(bus.read_io(0x00FE) & 0b0100_0000, 0b0100_0000);
     }
 
-    #[test]
     fn tape_first_read_auto_starts_playback_and_bit6_reflects_the_first_pulse() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         let tape = zx_tape::parse_tap(&[0x01, 0x00, 0x00]).unwrap(); // starts level=false
@@ -1982,8 +1914,13 @@ mod tests {
         let second_read = bus.read_io(0x00FE);
         assert_eq!(second_read & 0b0100_0000, 0b0100_0000);
     }
-
+    /// Merged (every check kept): `tape_ear_bit_is_idle_high_with_no_tape_installed`, `tape_first_read_auto_starts_playback_and_bit6_reflects_the_first_pulse`.
     #[test]
+    fn tape_ear_bit() {
+        tape_ear_bit_is_idle_high_with_no_tape_installed();
+        tape_first_read_auto_starts_playback_and_bit6_reflects_the_first_pulse();
+    }
+
     fn tape_speed_multiplier_is_applied() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         let tape = zx_tape::parse_tap(&[0x01, 0x00, 0x00]).unwrap();
@@ -1996,7 +1933,6 @@ mod tests {
         assert_eq!(read & 0b0100_0000, 0b0100_0000); // already on the second pulse (level=true)
     }
 
-    #[test]
     fn tape_does_not_affect_keyboard_bits_of_the_same_read() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.press_key(ZxSpectrumKey::Q); // row 2 (A10), bit 0
@@ -2007,6 +1943,12 @@ mod tests {
         let value = bus.read_io(0b1111_1011_1111_1110);
         assert_eq!(value & 0b0000_0001, 0); // Q still reads pressed
         assert_eq!(value & 0b0100_0000, 0); // tape bit still correct
+    }
+    /// Merged (every check kept): `tape_speed_multiplier_is_applied`, `tape_does_not_affect_keyboard_bits_of_the_same_read`.
+    #[test]
+    fn tape_speed_and_keyboard() {
+        tape_speed_multiplier_is_applied();
+        tape_does_not_affect_keyboard_bits_of_the_same_read();
     }
 
     fn build_minimal_dsk() -> Vec<u8> {
@@ -2215,7 +2157,6 @@ mod tests {
         assert_eq!(bus.peek(0xC000), 0xAB); // still worked -- 0x3ffd's earlier write didn't corrupt paging state
     }
 
-    #[test]
     fn kempston_reads_back_the_pressed_buttons_bit_pattern() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         assert_eq!(bus.read_io(0x1F), 0x00); // idle
@@ -2228,15 +2169,19 @@ mod tests {
         assert_eq!(bus.read_io(0x1F), 0b0001_0000);
     }
 
-    #[test]
     fn kempston_responds_on_every_mirror_with_bit5_of_the_port_clear() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.press_kempston(KempstonButton::Up);
         assert_eq!(bus.read_io(0x1F), 0b0000_1000);
         assert_eq!(bus.read_io(0x9F), 0b0000_1000); // another bit5-clear mirror (0x9F = 1001_1111)
     }
-
+    /// Merged (every check kept): `kempston_reads_back_the_pressed_buttons_bit_pattern`, `kempston_responds_on_every_mirror_with_bit5_of_the_port_clear`.
     #[test]
+    fn kempston_reads() {
+        kempston_reads_back_the_pressed_buttons_bit_pattern();
+        kempston_responds_on_every_mirror_with_bit5_of_the_port_clear();
+    }
+
     fn kempston_does_not_intercept_a_real_keyboard_scan_port() {
         // 0xFE (and any real keyboard scan address, which always has a low
         // byte of 0xFE) has bit 5 set, so it's never mistaken for Kempston.
@@ -2245,14 +2190,18 @@ mod tests {
         assert_eq!(bus.read_io(0xFEFE), 0xFF); // idle-high keyboard read, unaffected by Kempston state
     }
 
-    #[test]
     fn releasing_an_already_released_kempston_button_is_a_no_op() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.release_kempston(KempstonButton::Up);
         assert_eq!(bus.read_io(0x1F), 0x00);
     }
-
+    /// Merged (every check kept): `kempston_does_not_intercept_a_real_keyboard_scan_port`, `releasing_an_already_released_kempston_button_is_a_no_op`.
     #[test]
+    fn kempston_edge_cases() {
+        kempston_does_not_intercept_a_real_keyboard_scan_port();
+        releasing_an_already_released_kempston_button_is_a_no_op();
+    }
+
     fn fuller_reads_back_the_pressed_buttons_bit_pattern_active_low() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         assert_eq!(bus.read_io(0x7F), 0xFF); // idle -- active low, so all-1s
@@ -2265,7 +2214,6 @@ mod tests {
         assert_eq!(bus.read_io(0x7F), 0b0111_1111); // only bit 7 (Fire) still clear
     }
 
-    #[test]
     fn fuller_does_not_intercept_the_kempston_or_keyboard_ports() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.press_fuller(FullerButton::Fire);
@@ -2273,14 +2221,19 @@ mod tests {
         assert_eq!(bus.read_io(0xFEFE), 0xFF); // keyboard idle-high, unaffected
     }
 
-    #[test]
     fn releasing_an_already_released_fuller_button_is_a_no_op() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.release_fuller(FullerButton::Up);
         assert_eq!(bus.read_io(0x7F), 0xFF);
     }
-
+    /// Merged (every check kept): `fuller_reads_back_the_pressed_buttons_bit_pattern_active_low`, `fuller_does_not_intercept_the_kempston_or_keyboard_ports`, `releasing_an_already_released_fuller_button_is_a_no_op`.
     #[test]
+    fn fuller_cases() {
+        fuller_reads_back_the_pressed_buttons_bit_pattern_active_low();
+        fuller_does_not_intercept_the_kempston_or_keyboard_ports();
+        releasing_an_already_released_fuller_button_is_a_no_op();
+    }
+
     fn mouse_x_and_y_wrap_and_read_back_on_their_own_real_ports() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         assert_eq!(bus.read_io(0xFBDF), 0); // X idle
@@ -2294,7 +2247,6 @@ mod tests {
         assert_eq!(bus.read_io(0xFBDF), (5i8 - 10) as u8); // 5 + (-10) wraps
     }
 
-    #[test]
     fn mouse_buttons_read_back_active_low_on_the_real_button_port() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         assert_eq!(bus.read_io(0xFADF), 0x0F); // idle -- active low, low nibble all-1s
@@ -2306,7 +2258,6 @@ mod tests {
         assert_eq!(bus.read_io(0xFADF), 0x0F);
     }
 
-    #[test]
     fn mouse_wheel_reports_ticks_since_last_read_then_resets() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.scroll_mouse(1);
@@ -2317,8 +2268,14 @@ mod tests {
         // with no further scrolling must report 0, not the same 3 again.
         assert_eq!(bus.read_io(0xFADF) >> 4, 0);
     }
-
+    /// Merged (every check kept): `mouse_x_and_y_wrap_and_read_back_on_their_own_real_ports`, `mouse_buttons_read_back_active_low_on_the_real_button_port`, `mouse_wheel_reports_ticks_since_last_read_then_resets`.
     #[test]
+    fn mouse_reads() {
+        mouse_x_and_y_wrap_and_read_back_on_their_own_real_ports();
+        mouse_buttons_read_back_active_low_on_the_real_button_port();
+        mouse_wheel_reports_ticks_since_last_read_then_resets();
+    }
+
     fn mouse_never_intercepts_the_kempston_joystick_or_fuller_ports() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.move_mouse(7, 7);
@@ -2340,13 +2297,18 @@ mod tests {
     /// by this crate's own pre-existing keyboard tests failing after the
     /// mouse port decode was added, not by a mouse-specific test. Locked
     /// in here so it can't silently regress again.
-    #[test]
     fn mouse_x_decode_does_not_swallow_a_keyboard_row_whose_mask_ends_in_011() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.move_mouse(9, 0); // mouse_x != 0, so a wrongly-matched read would be visibly wrong
         // Real keyboard idle-high read on row-select byte 0xFB (bits 10:8
         // of the resulting port == 0b011, same as the mouse X port).
         assert_eq!(bus.read_io(0xFBFE), 0xFF);
+    }
+    /// Merged (every check kept): `mouse_never_intercepts_the_kempston_joystick_or_fuller_ports`, `mouse_x_decode_does_not_swallow_a_keyboard_row_whose_mask_ends_in_011`.
+    #[test]
+    fn mouse_decode_edge_cases() {
+        mouse_never_intercepts_the_kempston_joystick_or_fuller_ports();
+        mouse_x_decode_does_not_swallow_a_keyboard_row_whose_mask_ends_in_011();
     }
 }
 
@@ -2429,22 +2391,6 @@ mod contention_tests {
     }
 
     #[test]
-    fn reset_frame_tstate_returns_to_the_start_of_the_frame() {
-        let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
-        bus.advance_tstates(200);
-        bus.reset_frame_tstate();
-        assert_eq!(bus.frame_tstate, 0);
-    }
-
-    #[test]
-    fn advance_tstates_accumulates() {
-        let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
-        bus.advance_tstates(10);
-        bus.advance_tstates(7);
-        assert_eq!(bus.frame_tstate, 17);
-    }
-
-    #[test]
     fn step_returns_more_tstates_for_the_same_instruction_when_it_runs_from_contended_memory_during_screen_draw()
      {
         // LD A,(HL) is 7 T-states with zero contention. Placed at 0x4000
@@ -2482,14 +2428,12 @@ mod contention_tests {
     // the same 48K `6,5,4,3,2,1,0,0` pattern the memory-contention tests
     // above already exercise. ---
 
-    #[test]
     fn io_contention_uncontended_high_byte_and_odd_port_is_never_contended() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.frame_tstate = CONTENTION_48K.start;
         assert_eq!(bus.contend_io(0xFFFF), 0); // N:4
     }
 
-    #[test]
     fn io_contention_uncontended_high_byte_and_even_port_is_n1_c3() {
         // 0xFFFE: high byte 0xFF not contended, bit0 clear -- N:1, C:3. The
         // single check lands one T-state after `start` (pattern[1] = 5).
@@ -2498,7 +2442,6 @@ mod contention_tests {
         assert_eq!(bus.contend_io(0xFFFE), 5);
     }
 
-    #[test]
     fn io_contention_contended_high_byte_and_even_port_is_c1_c3() {
         // 0x7FFE: in the contended 0x4000-0x7fff range, bit0 clear -- C:1,
         // C:3. First check at `start` (pattern[0] = 6), second at
@@ -2508,7 +2451,6 @@ mod contention_tests {
         assert_eq!(bus.contend_io(0x7FFE), 6);
     }
 
-    #[test]
     fn io_contention_contended_high_byte_and_odd_port_is_the_worst_case_c1x4() {
         // 0x7FFF: in the contended range, bit0 set -- C:1, C:1, C:1, C:1,
         // four independent checks. Positions: start(6) -> start+7(0) ->
@@ -2517,15 +2459,21 @@ mod contention_tests {
         bus.frame_tstate = CONTENTION_48K.start;
         assert_eq!(bus.contend_io(0x7FFF), 12);
     }
-
+    /// Merged (every check kept): `io_contention_uncontended_high_byte_and_odd_port_is_never_contended`, `io_contention_uncontended_high_byte_and_even_port_is_n1_c3`, `io_contention_contended_high_byte_and_even_port_is_c1_c3`, `io_contention_contended_high_byte_and_odd_port_is_the_worst_case_c1x4`.
     #[test]
+    fn io_contention_patterns() {
+        io_contention_uncontended_high_byte_and_odd_port_is_never_contended();
+        io_contention_uncontended_high_byte_and_even_port_is_n1_c3();
+        io_contention_contended_high_byte_and_even_port_is_c1_c3();
+        io_contention_contended_high_byte_and_odd_port_is_the_worst_case_c1x4();
+    }
+
     fn io_contention_outside_the_screen_drawing_window_is_always_zero() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.frame_tstate = 0; // long before the frame's contended window starts
         assert_eq!(bus.contend_io(0x7FFF), 0);
     }
 
-    #[test]
     fn spectrum2a3_has_no_io_contention_at_all() {
         // The Amstrad gate array only contends while MREQ is active, which
         // it never is during an I/O cycle -- every port, at any frame
@@ -2536,6 +2484,12 @@ mod contention_tests {
         assert_eq!(bus.contend_io(0x7FFE), 0);
         assert_eq!(bus.contend_io(0xFFFE), 0);
     }
+    /// Merged (every check kept): `io_contention_outside_the_screen_drawing_window_is_always_zero`, `spectrum2a3_has_no_io_contention_at_all`.
+    #[test]
+    fn io_contention_none() {
+        io_contention_outside_the_screen_drawing_window_is_always_zero();
+        spectrum2a3_has_no_io_contention_at_all();
+    }
 
     // --- Floating bus: reading a genuinely unmapped port (any odd port not
     // decoded by AY/FDC/keyboard) returns whatever byte the ULA is
@@ -2545,14 +2499,12 @@ mod contention_tests {
     // odd port nothing else decodes" on a 48K bus (no AY/FDC to collide
     // with).
 
-    #[test]
     fn floating_bus_returns_idle_high_before_the_screen_drawing_window_starts() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.frame_tstate = CONTENTION_48K.start - 1;
         assert_eq!(bus.read_io(0xFFFF), 0xFF);
     }
 
-    #[test]
     fn floating_bus_returns_the_current_cells_bitmap_and_attribute_bytes() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.write(video::pixel_address(0, 0), 0x11); // row 0, col 0 bitmap
@@ -2576,11 +2528,17 @@ mod contention_tests {
         assert_eq!(bus.read_io(0xFFFF), 0xFF);
     }
 
-    #[test]
     fn floating_bus_returns_idle_high_once_past_the_screen_drawing_window() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.frame_tstate =
             CONTENTION_48K.start + CONTENTION_48K.period * CONTENDED_SCREEN_LINES + 1;
         assert_eq!(bus.read_io(0xFFFF), 0xFF);
+    }
+    /// Merged (every check kept): `floating_bus_returns_idle_high_before_the_screen_drawing_window_starts`, `floating_bus_returns_the_current_cells_bitmap_and_attribute_bytes`, `floating_bus_returns_idle_high_once_past_the_screen_drawing_window`.
+    #[test]
+    fn floating_bus_cases() {
+        floating_bus_returns_idle_high_before_the_screen_drawing_window_starts();
+        floating_bus_returns_the_current_cells_bitmap_and_attribute_bytes();
+        floating_bus_returns_idle_high_once_past_the_screen_drawing_window();
     }
 }

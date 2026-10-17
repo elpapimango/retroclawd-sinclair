@@ -71,7 +71,6 @@ mod tests {
         (mask as u16) << 8
     }
 
-    #[test]
     fn all_keys_start_released() {
         let matrix = KeyboardMatrix::new();
         for row in 0..8 {
@@ -79,7 +78,6 @@ mod tests {
         }
     }
 
-    #[test]
     fn pressing_a_key_clears_its_bit_in_its_row_only() {
         let mut matrix = KeyboardMatrix::new();
         matrix.press(2, 0); // row 2, bit 0
@@ -88,13 +86,18 @@ mod tests {
         assert_eq!(matrix.read(select_rows(&[1])), 0xFF);
     }
 
-    #[test]
     fn releasing_a_key_sets_its_bit_back() {
         let mut matrix = KeyboardMatrix::new();
         matrix.press(6, 0);
         matrix.release(6, 0);
 
         assert_eq!(matrix.read(select_rows(&[6])), 0xFF);
+    }
+    /// Merged (every check kept): `pressing_a_key_clears_its_bit_in_its_row_only`, `releasing_a_key_sets_its_bit_back`.
+    #[test]
+    fn press_and_release() {
+        pressing_a_key_clears_its_bit_in_its_row_only();
+        releasing_a_key_sets_its_bit_back();
     }
 
     #[test]
@@ -106,11 +109,16 @@ mod tests {
         assert_eq!(matrix.read(select_rows(&[0, 1])), 0b1111_1110);
     }
 
-    #[test]
     fn no_row_selected_reads_all_released() {
         let mut matrix = KeyboardMatrix::new();
         matrix.press(7, 0);
 
         assert_eq!(matrix.read(select_rows(&[])), 0xFF);
+    }
+    /// Merged (every check kept): `all_keys_start_released`, `no_row_selected_reads_all_released`.
+    #[test]
+    fn released_reads() {
+        all_keys_start_released();
+        no_row_selected_reads_all_released();
     }
 }

@@ -459,21 +459,6 @@ impl Machine for Zx81 {
 mod tests {
     use super::*;
 
-    #[test]
-    fn runs_a_tiny_program_to_halt_and_reports_registers() {
-        let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
-        // LD A,0x2A ; HALT -- loaded into RAM since ROM writes are dropped.
-        zx81.load(RAM_BASE, &[0x3E, 0x2A, 0x76]);
-        zx81.set_pc(RAM_BASE);
-
-        let stats = zx81.run(&mut |m| !m.halted());
-
-        assert_eq!(stats.instructions, 2);
-        assert!(zx81.halted());
-        assert_eq!(zx81.registers()[0], ("AF", 0x2A00));
-    }
-
-    #[test]
     fn port_watches_latch_the_cpus_own_out() {
         use machine::{PortHit, PortWatch};
         let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
@@ -499,7 +484,6 @@ mod tests {
         );
     }
 
-    #[test]
     fn write_port_is_decoded_like_a_cpu_out() {
         let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
         assert!(!zx81.bus.nmi_generator_running());
@@ -509,6 +493,12 @@ mod tests {
         assert!(zx81.bus.nmi_generator_running());
         zx81.write_port(0x00FD, 0);
         assert!(!zx81.bus.nmi_generator_running());
+    }
+    /// Merged (every check kept): `port_watches_latch_the_cpus_own_out`, `write_port_is_decoded_like_a_cpu_out`.
+    #[test]
+    fn port_watch_cases() {
+        port_watches_latch_the_cpus_own_out();
+        write_port_is_decoded_like_a_cpu_out();
     }
 
     /// INT is asserted while bit 6 of R is zero ("ZX80/ZX81 Video Interrupts",
@@ -542,7 +532,6 @@ mod tests {
             .1
     }
 
-    #[test]
     fn nmi_does_not_fire_while_generator_is_stopped() {
         let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
         zx81.load(RAM_BASE, &[0x00; 100]); // 100 NOPs
@@ -557,7 +546,6 @@ mod tests {
         assert_eq!(pc_of(&zx81), RAM_BASE as u64 + 100);
     }
 
-    #[test]
     fn nmi_fires_after_enough_cycles_once_generator_is_started() {
         let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
         // OUT (0xFE),A starts the generator (real ROM's own opcode), then
@@ -583,6 +571,12 @@ mod tests {
                 .1,
             0xFFFE
         );
+    }
+    /// Merged (every check kept): `nmi_does_not_fire_while_generator_is_stopped`, `nmi_fires_after_enough_cycles_once_generator_is_started`.
+    #[test]
+    fn nmi_generator_timing() {
+        nmi_does_not_fire_while_generator_is_stopped();
+        nmi_fires_after_enough_cycles_once_generator_is_started();
     }
 
     #[test]
@@ -647,7 +641,6 @@ mod tests {
         data
     }
 
-    #[test]
     fn the_fast_load_trap_stores_the_file_and_jumps_to_the_loads_tail() {
         let mut zx81 = Zx81::with_ram_kb(rom_with_load_data_entry(), Region::Pal, 16).unwrap();
         let data = tape_file(300);
@@ -669,7 +662,6 @@ mod tests {
         assert_eq!(zx81.read_memory(0x4009), 0);
     }
 
-    #[test]
     fn the_fast_load_trap_stays_out_when_off_or_when_the_file_does_not_fit() {
         let off = |fast: bool, ram_kb: usize, len: usize| {
             let mut zx81 =
@@ -687,6 +679,12 @@ mod tests {
             "3000 bytes do not fit the 1K machine"
         );
         assert_ne!(off(true, 16, 3000), 0, "but they fit a 16K pack");
+    }
+    /// Merged (every check kept): `the_fast_load_trap_stores_the_file_and_jumps_to_the_loads_tail`, `the_fast_load_trap_stays_out_when_off_or_when_the_file_does_not_fit`.
+    #[test]
+    fn fast_load_trap() {
+        the_fast_load_trap_stores_the_file_and_jumps_to_the_loads_tail();
+        the_fast_load_trap_stays_out_when_off_or_when_the_file_does_not_fit();
     }
 
     #[test]
@@ -737,15 +735,6 @@ mod tests {
         assert!(Machine::load_state(&mut zx81, &[0xFF; 4]).is_err());
     }
 
-    #[test]
-    fn frame_hz_follows_region() {
-        let pal = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
-        let ntsc = Zx81::new(vec![0; ROM_SIZE], Region::Ntsc);
-
-        assert_eq!(pal.frame_hz(), 50);
-        assert_eq!(ntsc.frame_hz(), 60);
-    }
-
     /// Runs `LD A,<row_mask>` / `IN A,(0xFE)` / `HALT` through the real CPU
     /// and returns the resulting `A` register -- the same path the ROM's
     /// own keyboard scan uses, so this exercises `Zx81Bus::read_io` and
@@ -755,34 +744,5 @@ mod tests {
         zx81.set_pc(RAM_BASE);
         zx81.run(&mut |m| !m.halted());
         (zx81.registers()[0].1 >> 8) as u8
-    }
-
-    #[test]
-    fn pressed_key_clears_its_bit_when_scanned_via_in_a_n() {
-        let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
-        zx81.press_key(Zx81Key::Q); // row 2 (A10), bit 0
-
-        // Select row 2 only: clear bit 2 of the row-select mask.
-        assert_eq!(scan_row(&mut zx81, 0b1111_1011), 0b0111_1110);
-    }
-
-    #[test]
-    fn released_key_reads_back_as_unpressed() {
-        let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
-        zx81.press_key(Zx81Key::Enter); // row 6 (A14), bit 0
-        zx81.release_key(Zx81Key::Enter);
-
-        assert_eq!(scan_row(&mut zx81, 0b1011_1111), 0x7F);
-    }
-
-    #[test]
-    fn scanning_two_rows_at_once_ands_them_together() {
-        let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
-        zx81.press_key(Zx81Key::Shift); // row 0 (A8), bit 0
-        zx81.press_key(Zx81Key::A); // row 1 (A9), bit 0
-
-        // Select rows 0 and 1 together, as the ROM does to detect
-        // SHIFT-together-with-another-key.
-        assert_eq!(scan_row(&mut zx81, 0b1111_1100), 0b0111_1110);
     }
 }

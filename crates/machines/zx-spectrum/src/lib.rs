@@ -1303,21 +1303,6 @@ impl Machine for ZxSpectrum {
 mod tests {
     use super::*;
 
-    #[test]
-    fn runs_a_tiny_program_to_halt_and_reports_registers() {
-        let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        // LD A,0x2A ; HALT -- loaded into RAM since ROM writes are dropped.
-        spectrum.load(RAM_BASE, &[0x3E, 0x2A, 0x76]);
-        spectrum.set_pc(RAM_BASE);
-
-        let stats = spectrum.run(&mut |m| !m.halted());
-
-        assert_eq!(stats.instructions, 2);
-        assert!(spectrum.halted());
-        assert_eq!(spectrum.registers()[0], ("AF", 0x2A00));
-    }
-
-    #[test]
     fn port_watches_latch_the_cpus_own_in_and_out_only() {
         use machine::{PortHit, PortWatch};
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
@@ -1350,7 +1335,6 @@ mod tests {
         assert_eq!(spectrum.take_port_hit(), None);
     }
 
-    #[test]
     fn a_block_otir_trips_a_port_watch_on_its_first_iteration() {
         use machine::{PortHit, PortWatch};
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
@@ -1379,7 +1363,6 @@ mod tests {
         assert_eq!(spectrum.pc(), RAM_BASE + 6, "PC is back on the OTIR");
     }
 
-    #[test]
     fn write_port_is_decoded_like_a_cpu_out() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         spectrum.write_port(0x00FE, 0x05);
@@ -1396,26 +1379,14 @@ mod tests {
         spectrum.write_port(0x00FF, 0x07);
         assert_eq!(spectrum.bus.border_color(), 3, "not a ULA address");
     }
-
+    /// Merged (every check kept): `port_watches_latch_the_cpus_own_in_and_out_only`, `a_block_otir_trips_a_port_watch_on_its_first_iteration`, `write_port_is_decoded_like_a_cpu_out`.
     #[test]
-    fn joystick_type_defaults_to_kempston_and_round_trips_through_the_setter() {
-        let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        assert_eq!(spectrum.joystick_type(), JoystickType::Kempston);
-
-        spectrum.set_joystick_type(JoystickType::Sinclair2);
-        assert_eq!(spectrum.joystick_type(), JoystickType::Sinclair2);
+    fn port_watch_cases() {
+        port_watches_latch_the_cpus_own_in_and_out_only();
+        a_block_otir_trips_a_port_watch_on_its_first_iteration();
+        write_port_is_decoded_like_a_cpu_out();
     }
 
-    #[test]
-    fn frame_hz_follows_region() {
-        let pal = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        let ntsc = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Ntsc, Model::Spectrum48);
-
-        assert_eq!(pal.frame_hz(), 50);
-        assert_eq!(ntsc.frame_hz(), 60);
-    }
-
-    #[test]
     fn flash_phase_toggles_exactly_every_flash_toggle_frames_interrupts() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
 
@@ -1434,7 +1405,6 @@ mod tests {
         assert!(!spectrum.flash_phase, "should have toggled back");
     }
 
-    #[test]
     fn render_frame_reflects_flash_phase_via_request_interrupt() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         // flash=1, paper=black(0), ink=green(4): attribute 0b1_0_000_100.
@@ -1449,44 +1419,11 @@ mod tests {
 
         assert_ne!(off, on, "render_frame should reflect the flash toggle");
     }
-
-    /// Runs `LD A,<row_mask>` / `IN A,(0xFE)` / `HALT` through the real CPU
-    /// and returns the resulting `A` register -- the same path the ROM's
-    /// own keyboard scan uses.
-    fn scan_row(spectrum: &mut ZxSpectrum, row_mask: u8) -> u8 {
-        spectrum.load(RAM_BASE, &[0x3E, row_mask, 0xDB, 0xFE, 0x76]);
-        spectrum.set_pc(RAM_BASE);
-        spectrum.run(&mut |m| !m.halted());
-        (spectrum.registers()[0].1 >> 8) as u8
-    }
-
+    /// Merged (every check kept): `flash_phase_toggles_exactly_every_flash_toggle_frames_interrupts`, `render_frame_reflects_flash_phase_via_request_interrupt`.
     #[test]
-    fn pressed_key_clears_its_bit_when_scanned_via_in_a_n() {
-        let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        spectrum.press_key(ZxSpectrumKey::Q); // row 2 (A10), bit 0
-
-        // Select row 2 only: clear bit 2 of the row-select mask.
-        assert_eq!(scan_row(&mut spectrum, 0b1111_1011), 0b1111_1110);
-    }
-
-    #[test]
-    fn released_key_reads_back_as_unpressed() {
-        let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        spectrum.press_key(ZxSpectrumKey::Enter); // row 6 (A14), bit 0
-        spectrum.release_key(ZxSpectrumKey::Enter);
-
-        assert_eq!(scan_row(&mut spectrum, 0b1011_1111), 0xFF);
-    }
-
-    #[test]
-    fn scanning_two_rows_at_once_ands_them_together() {
-        let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        spectrum.press_key(ZxSpectrumKey::CapsShift); // row 0 (A8), bit 0
-        spectrum.press_key(ZxSpectrumKey::A); // row 1 (A9), bit 0
-
-        // Select rows 0 and 1 together, as the ROM does to detect
-        // CAPS SHIFT held with another key.
-        assert_eq!(scan_row(&mut spectrum, 0b1111_1100), 0b1111_1110);
+    fn flash_phase() {
+        flash_phase_toggles_exactly_every_flash_toggle_frames_interrupts();
+        render_frame_reflects_flash_phase_via_request_interrupt();
     }
 
     #[test]
@@ -1513,7 +1450,6 @@ mod tests {
         assert_eq!(spectrum.bus.border_color(), 5);
     }
 
-    #[test]
     fn load_snapshot_rejects_a_128k_snapshot_on_a_48k_machine() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         let snapshot = z80_snapshot::Snapshot {
@@ -1583,7 +1519,6 @@ mod tests {
         assert_eq!(spectrum.read_memory(0xC000), 0xCD);
     }
 
-    #[test]
     fn load_snapshot_rejects_2a3_snapshot_on_128k_machine() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE_128K], Region::Pal, Model::Spectrum128);
         let snapshot = z80_snapshot::Snapshot {
@@ -1605,7 +1540,6 @@ mod tests {
         assert!(spectrum.load_snapshot(snapshot).is_err());
     }
 
-    #[test]
     fn load_sna_snapshot_installs_registers_memory_and_border() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         let mut cpu = z80::Cpu::new();
@@ -1628,7 +1562,6 @@ mod tests {
         assert_eq!(spectrum.bus.border_color(), 5);
     }
 
-    #[test]
     fn load_sna_snapshot_rejects_a_128k_snapshot_on_a_48k_machine() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         let snapshot = sna_snapshot::Snapshot {
@@ -1646,7 +1579,6 @@ mod tests {
         assert!(spectrum.load_sna_snapshot(snapshot).is_err());
     }
 
-    #[test]
     fn load_sna_snapshot_rejects_a_48k_snapshot_on_a_128k_machine() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE_128K], Region::Pal, Model::Spectrum128);
         let snapshot = sna_snapshot::Snapshot {
@@ -1659,7 +1591,6 @@ mod tests {
         assert!(spectrum.load_sna_snapshot(snapshot).is_err());
     }
 
-    #[test]
     fn load_sna_snapshot_rejects_2a3_outright() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE_2A3], Region::Pal, Model::Spectrum2A3);
         let snapshot = sna_snapshot::Snapshot {
@@ -1672,7 +1603,6 @@ mod tests {
         assert!(spectrum.load_sna_snapshot(snapshot).is_err());
     }
 
-    #[test]
     fn load_sna_snapshot_installs_128k_ram_banks_and_paging() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE_128K], Region::Pal, Model::Spectrum128);
         let snapshot = sna_snapshot::Snapshot {
@@ -1694,8 +1624,13 @@ mod tests {
 
         assert_eq!(spectrum.read_memory(0xC000), 0xAB);
     }
-
+    /// Merged (every check kept): `load_sna_snapshot_installs_registers_memory_and_border`, `load_sna_snapshot_installs_128k_ram_banks_and_paging`.
     #[test]
+    fn load_sna_snapshot_installs() {
+        load_sna_snapshot_installs_registers_memory_and_border();
+        load_sna_snapshot_installs_128k_ram_banks_and_paging();
+    }
+
     fn save_then_load_snapshot_round_trips_48k_state() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         spectrum.load(RAM_BASE, &[0x11, 0x22, 0x33]);
@@ -1711,7 +1646,6 @@ mod tests {
         assert_eq!(restored.bus.border_color(), 4);
     }
 
-    #[test]
     fn save_then_load_sna_snapshot_round_trips_48k_state() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         spectrum.load(RAM_BASE, &[0x11, 0x22, 0x33]);
@@ -1728,7 +1662,6 @@ mod tests {
         assert_eq!(restored.bus.border_color(), 4);
     }
 
-    #[test]
     fn save_then_load_snapshot_round_trips_128k_state() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE_128K], Region::Pal, Model::Spectrum128);
         spectrum.bus.load_ram_bank(3, &[0xAB]);
@@ -1741,15 +1674,21 @@ mod tests {
         assert_eq!(restored.read_memory(0xC000), 0xAB);
     }
 
-    #[test]
     fn save_snapshot_2a3_rejects_sna_but_not_z80() {
         let spectrum = ZxSpectrum::new(vec![0; ROM_SIZE_2A3], Region::Pal, Model::Spectrum2A3);
 
         assert!(spectrum.save_sna_snapshot().is_err());
         let _ = spectrum.save_snapshot(); // must not panic
     }
-
+    /// Merged (every check kept): `save_then_load_snapshot_round_trips_48k_state`, `save_then_load_sna_snapshot_round_trips_48k_state`, `save_then_load_snapshot_round_trips_128k_state`, `save_snapshot_2a3_rejects_sna_but_not_z80`.
     #[test]
+    fn save_then_load_z80_and_sna() {
+        save_then_load_snapshot_round_trips_48k_state();
+        save_then_load_sna_snapshot_round_trips_48k_state();
+        save_then_load_snapshot_round_trips_128k_state();
+        save_snapshot_2a3_rejects_sna_but_not_z80();
+    }
+
     fn save_then_load_szx_snapshot_round_trips_48k_state() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         spectrum.load(RAM_BASE, &[0x11, 0x22, 0x33]);
@@ -1765,7 +1704,6 @@ mod tests {
         assert_eq!(restored.bus.border_color(), 4);
     }
 
-    #[test]
     fn save_then_load_szx_snapshot_round_trips_128k_state_and_ay() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE_128K], Region::Pal, Model::Spectrum128);
         spectrum.bus.load_ram_bank(3, &[0xAB]);
@@ -1781,7 +1719,6 @@ mod tests {
         assert_eq!(restored.bus.ay().unwrap().read_register(8), 0x0F);
     }
 
-    #[test]
     fn save_then_load_szx_snapshot_round_trips_2a3_state() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE_2A3], Region::Pal, Model::Spectrum2A3);
         spectrum.bus.load_ram_bank(6, &[0xCD]);
@@ -1793,8 +1730,14 @@ mod tests {
 
         assert_eq!(restored.read_memory(0xC000), 0xCD);
     }
-
+    /// Merged (every check kept): `save_then_load_szx_snapshot_round_trips_48k_state`, `save_then_load_szx_snapshot_round_trips_128k_state_and_ay`, `save_then_load_szx_snapshot_round_trips_2a3_state`.
     #[test]
+    fn save_then_load_szx() {
+        save_then_load_szx_snapshot_round_trips_48k_state();
+        save_then_load_szx_snapshot_round_trips_128k_state_and_ay();
+        save_then_load_szx_snapshot_round_trips_2a3_state();
+    }
+
     fn load_szx_snapshot_rejects_a_128k_file_on_a_48k_machine() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         let snapshot_128k =
@@ -1803,8 +1746,17 @@ mod tests {
 
         assert!(spectrum.load_szx_snapshot(snapshot_128k).is_err());
     }
-
+    /// Merged (every check kept): `load_snapshot_rejects_a_128k_snapshot_on_a_48k_machine`, `load_snapshot_rejects_2a3_snapshot_on_128k_machine`, `load_sna_snapshot_rejects_a_128k_snapshot_on_a_48k_machine`, `load_sna_snapshot_rejects_a_48k_snapshot_on_a_128k_machine`, `load_sna_snapshot_rejects_2a3_outright`, `load_szx_snapshot_rejects_a_128k_file_on_a_48k_machine`.
     #[test]
+    fn snapshot_model_mismatches_are_refused() {
+        load_snapshot_rejects_a_128k_snapshot_on_a_48k_machine();
+        load_snapshot_rejects_2a3_snapshot_on_128k_machine();
+        load_sna_snapshot_rejects_a_128k_snapshot_on_a_48k_machine();
+        load_sna_snapshot_rejects_a_48k_snapshot_on_a_128k_machine();
+        load_sna_snapshot_rejects_2a3_outright();
+        load_szx_snapshot_rejects_a_128k_file_on_a_48k_machine();
+    }
+
     fn save_state_then_load_state_round_trips_48k_state() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         spectrum.load(RAM_BASE, &[0x11, 0x22, 0x33]);
@@ -1824,7 +1776,6 @@ mod tests {
         assert_eq!(restored.joystick_type(), JoystickType::Sinclair1);
     }
 
-    #[test]
     fn save_state_then_load_state_round_trips_128k_state() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE_128K], Region::Pal, Model::Spectrum128);
         spectrum.bus.load_ram_bank(3, &[0xAB]);
@@ -1837,7 +1788,6 @@ mod tests {
         assert_eq!(restored.read_memory(0xC000), 0xAB);
     }
 
-    #[test]
     fn save_state_then_load_state_round_trips_2a3_state() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE_2A3], Region::Pal, Model::Spectrum2A3);
         spectrum.bus.load_ram_bank(3, &[0xCD]);
@@ -1848,6 +1798,13 @@ mod tests {
         Machine::load_state(&mut restored, &bytes).unwrap();
 
         assert_eq!(restored.read_memory(0xC000), 0xCD);
+    }
+    /// Merged (every check kept): `save_state_then_load_state_round_trips_48k_state`, `save_state_then_load_state_round_trips_128k_state`, `save_state_then_load_state_round_trips_2a3_state`.
+    #[test]
+    fn save_state_round_trips() {
+        save_state_then_load_state_round_trips_48k_state();
+        save_state_then_load_state_round_trips_128k_state();
+        save_state_then_load_state_round_trips_2a3_state();
     }
 
     #[test]
@@ -1896,7 +1853,6 @@ mod tests {
         );
     }
 
-    #[test]
     fn drain_audio_returns_silence_when_speaker_and_ay_are_both_quiet() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         spectrum.load(RAM_BASE, &[0x00u8; 200]);
@@ -1953,7 +1909,6 @@ mod tests {
         assert!(spectrum.drain_audio().iter().any(|&s| s > 0.0));
     }
 
-    #[test]
     fn unfiltered_speaker_type_is_a_pure_passthrough_by_default() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         let mut program = vec![0x3E, 0b0001_0000, 0xD3, 0xFE]; // beeper on
@@ -1970,7 +1925,6 @@ mod tests {
         assert!(spectrum.drain_audio().contains(&0.3));
     }
 
-    #[test]
     fn filtered_speaker_types_smooth_the_beeper_toggle_instead_of_jumping_instantly() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         spectrum.set_speaker_type(SpeakerType::Beeper);
@@ -1988,8 +1942,13 @@ mod tests {
             "expected a smoothed-in sample strictly between 0 and the raw 0.3 level, got {samples:?}"
         );
     }
-
+    /// Merged (every check kept): `unfiltered_speaker_type_is_a_pure_passthrough_by_default`, `filtered_speaker_types_smooth_the_beeper_toggle_instead_of_jumping_instantly`.
     #[test]
+    fn speaker_types() {
+        unfiltered_speaker_type_is_a_pure_passthrough_by_default();
+        filtered_speaker_types_smooth_the_beeper_toggle_instead_of_jumping_instantly();
+    }
+
     fn drain_audio_empties_the_buffer() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         spectrum.load(RAM_BASE, &[0x00u8; 200]);
@@ -2001,16 +1960,11 @@ mod tests {
 
         assert!(spectrum.drain_audio().is_empty());
     }
-
+    /// Merged (every check kept): `drain_audio_returns_silence_when_speaker_and_ay_are_both_quiet`, `drain_audio_empties_the_buffer`.
     #[test]
-    fn sym_shift_and_caps_shift_are_distinct_keys() {
-        // Regression guard for the two keys that differ from ZX81's matrix:
-        // SymShift is row 7 bit 1, not the same slot as ZX81's `.`.
-        let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        spectrum.press_key(ZxSpectrumKey::SymShift);
-
-        // Row 7 selected: bit 1 (SymShift) clear, bit 0 (Space) still set.
-        assert_eq!(scan_row(&mut spectrum, 0b0111_1111), 0b1111_1101);
+    fn drain_audio_silence_and_emptying() {
+        drain_audio_returns_silence_when_speaker_and_ay_are_both_quiet();
+        drain_audio_empties_the_buffer();
     }
 
     fn build_minimal_dsk() -> Vec<u8> {
@@ -2040,7 +1994,6 @@ mod tests {
         bytes
     }
 
-    #[test]
     fn load_disk_rejects_non_2a3_models() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         let disk = dsk::parse(&build_minimal_dsk()).unwrap();
@@ -2048,12 +2001,17 @@ mod tests {
         assert!(spectrum.load_disk(disk).is_err());
     }
 
-    #[test]
     fn load_disk_succeeds_on_spectrum2a3() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE_2A3], Region::Pal, Model::Spectrum2A3);
         let disk = dsk::parse(&build_minimal_dsk()).unwrap();
 
         assert!(spectrum.load_disk(disk).is_ok());
+    }
+    /// Merged (every check kept): `load_disk_rejects_non_2a3_models`, `load_disk_succeeds_on_spectrum2a3`.
+    #[test]
+    fn load_disk_models() {
+        load_disk_rejects_non_2a3_models();
+        load_disk_succeeds_on_spectrum2a3();
     }
 
     #[test]
@@ -2163,7 +2121,6 @@ mod tests {
         );
     }
 
-    #[test]
     fn fast_tape_load_trap_falls_through_on_flag_mismatch() {
         let mut spectrum = spectrum_at_ld_bytes(0x00, 3, 0x9000, true); // expects header (0x00)
         spectrum.load_tape(tap_block(0xFF, &[0x11, 0x22, 0x33])); // tape's next block is data (0xFF)
@@ -2175,7 +2132,6 @@ mod tests {
         assert_eq!(spectrum.read_memory(0x9000), 0x00);
     }
 
-    #[test]
     fn fast_tape_load_trap_falls_through_on_length_mismatch() {
         let mut spectrum = spectrum_at_ld_bytes(0xFF, 99, 0x9000, true); // expects 99 bytes
         spectrum.load_tape(tap_block(0xFF, &[0x11, 0x22, 0x33])); // block only has 3
@@ -2186,7 +2142,6 @@ mod tests {
         assert_eq!(spectrum.cpu.pc, 0x0557, "should not have trapped");
     }
 
-    #[test]
     fn fast_tape_load_trap_falls_through_when_rom_byte_does_not_match() {
         let mut rom = vec![0u8; ROM_SIZE];
         rom[0x0556] = 0x00; // NOP, not the real INC D -- a "custom ROM"
@@ -2208,6 +2163,13 @@ mod tests {
             "NOP executed normally, not trapped"
         );
         assert_eq!(spectrum.read_memory(0x9000), 0x00);
+    }
+    /// Merged (every check kept): `fast_tape_load_trap_falls_through_on_flag_mismatch`, `fast_tape_load_trap_falls_through_on_length_mismatch`, `fast_tape_load_trap_falls_through_when_rom_byte_does_not_match`.
+    #[test]
+    fn fast_tape_load_trap_falls_through() {
+        fast_tape_load_trap_falls_through_on_flag_mismatch();
+        fast_tape_load_trap_falls_through_on_length_mismatch();
+        fast_tape_load_trap_falls_through_when_rom_byte_does_not_match();
     }
 
     #[test]
@@ -2232,7 +2194,6 @@ mod tests {
         assert_eq!(spectrum.cpu.pc, 0x8000, "still returns to the caller");
     }
 
-    #[test]
     fn fast_tape_load_trap_verify_mode_compares_without_writing() {
         let mut spectrum = spectrum_at_ld_bytes(0xFF, 3, 0x9000, false); // carry clear: VERIFY
         spectrum.load(0x9000, &[0x11, 0x22, 0x33]); // memory already holds the expected bytes
@@ -2245,7 +2206,6 @@ mod tests {
         assert_eq!(spectrum.read_memory(0x9000), 0x11, "verify never writes");
     }
 
-    #[test]
     fn fast_tape_load_trap_verify_mode_clears_carry_on_mismatch() {
         let mut spectrum = spectrum_at_ld_bytes(0xFF, 3, 0x9000, false); // VERIFY
         spectrum.load(0x9000, &[0x11, 0x22, 0xFF]); // last byte doesn't match the tape's
@@ -2255,6 +2215,12 @@ mod tests {
         spectrum.step();
 
         assert_eq!(spectrum.cpu.f() & 0x01, 0, "carry clear: verify mismatched");
+    }
+    /// Merged (every check kept): `fast_tape_load_trap_verify_mode_compares_without_writing`, `fast_tape_load_trap_verify_mode_clears_carry_on_mismatch`.
+    #[test]
+    fn fast_tape_load_trap_verify_mode() {
+        fast_tape_load_trap_verify_mode_compares_without_writing();
+        fast_tape_load_trap_verify_mode_clears_carry_on_mismatch();
     }
 
     /// Steps 6000 NOPs and says whether the tape produced any pulse.

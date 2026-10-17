@@ -1791,7 +1791,6 @@ mod tests {
         assert!(status.is_ok());
     }
 
-    #[test]
     fn debug_chip_snapshots_expose_generic_overlay_chip_for_gui_panel() {
         let create_req = plugin_api::encode_message(&create_request("zx-spectrum-2a3"))
             .expect("encode create req");
@@ -1842,7 +1841,6 @@ mod tests {
         assert!(status.is_ok());
     }
 
-    #[test]
     fn debug_chip_snapshots_generic_overlay_omits_disk_fields_on_48k() {
         let create_req =
             plugin_api::encode_message(&create_request("zx-spectrum")).expect("encode create req");
@@ -1887,6 +1885,12 @@ mod tests {
         // SAFETY: instance handle came from create response above.
         let status = unsafe { plugin_destroy_instance_v1(create.instance) };
         assert!(status.is_ok());
+    }
+    /// Merged (every check kept): `debug_chip_snapshots_expose_generic_overlay_chip_for_gui_panel`, `debug_chip_snapshots_generic_overlay_omits_disk_fields_on_48k`.
+    #[test]
+    fn debug_chip_snapshots() {
+        debug_chip_snapshots_expose_generic_overlay_chip_for_gui_panel();
+        debug_chip_snapshots_generic_overlay_omits_disk_fields_on_48k();
     }
 
     /// `firmware.toml` (next to the family's `Cargo.toml`) tells `--firmware auto` which file fills which machine

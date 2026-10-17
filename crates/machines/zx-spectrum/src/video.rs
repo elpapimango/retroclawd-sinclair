@@ -218,7 +218,6 @@ mod tests {
         }
     }
 
-    #[test]
     fn flash_bit_swaps_ink_and_paper_only_during_the_on_phase() {
         let mut bus = test_bus();
         // flash=1, bright=0, paper=black(0), ink=green(4): 0b1_0_000_100.
@@ -243,7 +242,6 @@ mod tests {
         }
     }
 
-    #[test]
     fn non_flash_cells_are_unaffected_by_flash_phase() {
         let mut bus = test_bus();
         bus.load(0x5800, &[0b0_000_100]); // flash=0, paper=black, ink=green
@@ -254,8 +252,13 @@ mod tests {
             render_frame(&bus, false, true).2
         );
     }
-
+    /// Merged (every check kept): `flash_bit_swaps_ink_and_paper_only_during_the_on_phase`, `non_flash_cells_are_unaffected_by_flash_phase`.
     #[test]
+    fn flash_cells() {
+        flash_bit_swaps_ink_and_paper_only_during_the_on_phase();
+        non_flash_cells_are_unaffected_by_flash_phase();
+    }
+
     fn border_false_returns_the_original_256x192_dimensions() {
         let bus = test_bus();
 
@@ -265,7 +268,6 @@ mod tests {
         assert_eq!(rgb.len(), (SCREEN_WIDTH * SCREEN_HEIGHT * 3) as usize);
     }
 
-    #[test]
     fn border_true_pads_by_border_px_and_paints_the_current_border_color() {
         use machine::Bus;
 
@@ -281,7 +283,6 @@ mod tests {
         assert_eq!(&rgb[0..3], &[0xCD, 0, 0]);
     }
 
-    #[test]
     fn border_color_only_uses_low_3_bits_of_the_written_value() {
         use machine::Bus;
 
@@ -290,5 +291,12 @@ mod tests {
         bus.write_io(0x00FE, 0b1111_1101); // low 3 bits = 5 (cyan)
 
         assert_eq!(bus.border_color(), 0b101);
+    }
+    /// Merged (every check kept): `border_false_returns_the_original_256x192_dimensions`, `border_true_pads_by_border_px_and_paints_the_current_border_color`, `border_color_only_uses_low_3_bits_of_the_written_value`.
+    #[test]
+    fn border_rendering() {
+        border_false_returns_the_original_256x192_dimensions();
+        border_true_pads_by_border_px_and_paints_the_current_border_color();
+        border_color_only_uses_low_3_bits_of_the_written_value();
     }
 }

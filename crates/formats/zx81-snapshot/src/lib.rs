@@ -180,14 +180,12 @@ mod tests {
         assert_eq!(write_p(&snap), vec![1, 2, 3]);
     }
 
-    #[test]
     fn write_p81_round_trips_a_named_file() {
         let bytes = [0x26, 0x27 | 0x80, 0xAA, 0xBB];
         let snap = parse_p81(&bytes).unwrap();
         assert_eq!(write_p81(&snap).unwrap(), bytes.to_vec());
     }
 
-    #[test]
     fn write_p81_needs_a_name_that_ends_with_bit_7() {
         let nameless = parse_p(&[1, 2, 3]);
         assert_eq!(write_p81(&nameless), Err(Error::MissingNameTerminator));
@@ -203,6 +201,12 @@ mod tests {
         };
         assert_eq!(write_p81(&early), Err(Error::MissingNameTerminator));
     }
+    /// Merged (every check kept): `write_p81_round_trips_a_named_file`, `write_p81_needs_a_name_that_ends_with_bit_7`.
+    #[test]
+    fn write_p81_cases() {
+        write_p81_round_trips_a_named_file();
+        write_p81_needs_a_name_that_ends_with_bit_7();
+    }
 
     #[test]
     fn parse_p_has_no_name_and_treats_everything_as_data() {
@@ -212,7 +216,6 @@ mod tests {
         assert_eq!(snap.data, vec![1, 2, 3]);
     }
 
-    #[test]
     fn parse_p81_splits_name_header_from_data() {
         // "AB" (raw codes, arbitrary here since we don't decode them) with
         // the final byte's bit 7 set marking the end of the name.
@@ -224,7 +227,6 @@ mod tests {
         assert_eq!(snap.data, vec![0xAA, 0xBB]);
     }
 
-    #[test]
     fn parse_p81_with_single_byte_name() {
         let bytes = [0x01 | 0x80, 0xAA, 0xBB];
 
@@ -234,11 +236,17 @@ mod tests {
         assert_eq!(snap.data, vec![0xAA, 0xBB]);
     }
 
-    #[test]
     fn parse_p81_without_terminator_is_an_error() {
         let bytes = vec![0x01u8; 300]; // no bit-7 byte anywhere
 
         assert_eq!(parse_p81(&bytes), Err(Error::MissingNameTerminator));
+    }
+    /// Merged (every check kept): `parse_p81_splits_name_header_from_data`, `parse_p81_with_single_byte_name`, `parse_p81_without_terminator_is_an_error`.
+    #[test]
+    fn parse_p81_cases() {
+        parse_p81_splits_name_header_from_data();
+        parse_p81_with_single_byte_name();
+        parse_p81_without_terminator_is_an_error();
     }
 
     /// A ZX80 file of `len` bytes whose `E_LINE` says `0x4000 + len`.
@@ -249,7 +257,6 @@ mod tests {
         bytes
     }
 
-    #[test]
     fn a_zx80_o_file_is_the_memory_from_4000_up_to_its_own_e_line() {
         let bytes = zx80_file(0x28 + 17);
         let program = parse_o(&bytes).unwrap();
@@ -258,7 +265,6 @@ mod tests {
         assert_eq!(write_o(&program), bytes);
     }
 
-    #[test]
     fn a_zx80_file_that_disagrees_with_its_e_line_or_is_too_short_is_refused() {
         let mut bytes = zx80_file(0x30);
         bytes.push(0);
@@ -274,5 +280,11 @@ mod tests {
         let p = [0x00u8, 0x80, 0x76, 0x76, 0xD4, 0x43, 0, 0, 0, 0, 0x6E, 0x43];
         assert!(parse_o(&[&p[..], &[0; 40]].concat()).is_err());
         assert!(parse_o(&bytes).unwrap_err().to_string().contains("E_LINE"));
+    }
+    /// Merged (every check kept): `a_zx80_o_file_is_the_memory_from_4000_up_to_its_own_e_line`, `a_zx80_file_that_disagrees_with_its_e_line_or_is_too_short_is_refused`.
+    #[test]
+    fn zx80_o_files() {
+        a_zx80_o_file_is_the_memory_from_4000_up_to_its_own_e_line();
+        a_zx80_file_that_disagrees_with_its_e_line_or_is_too_short_is_refused();
     }
 }

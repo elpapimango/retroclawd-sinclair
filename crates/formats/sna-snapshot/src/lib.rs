@@ -409,7 +409,6 @@ mod tests {
         }
     }
 
-    #[test]
     fn rejects_a_stack_pointer_outside_ram() {
         let mut bytes = header_48k(0x0010); // in ROM, not RAM
         bytes.extend_from_slice(&vec![0u8; RAM_LEN]);
@@ -417,9 +416,14 @@ mod tests {
         assert_eq!(parse(&bytes), Err(Error::StackPointerNotInRam(0x0010)));
     }
 
-    #[test]
     fn rejects_an_unrecognized_length() {
         assert_eq!(parse(&[0u8; 100]), Err(Error::UnrecognizedLength(100)));
+    }
+    /// Merged (every check kept): `rejects_a_stack_pointer_outside_ram`, `rejects_an_unrecognized_length`.
+    #[test]
+    fn parse_rejections() {
+        rejects_a_stack_pointer_outside_ram();
+        rejects_an_unrecognized_length();
     }
 
     #[test]
@@ -519,7 +523,6 @@ mod tests {
         assert_eq!(round_tripped, original);
     }
 
-    #[test]
     fn write_48k_rejects_a_stack_pointer_with_nowhere_to_push_pc() {
         let mut cpu = Cpu::new();
         cpu.sp = 0x0001; // sp-2 wraps below RAM
@@ -539,7 +542,6 @@ mod tests {
         ));
     }
 
-    #[test]
     fn write_48k_rejects_a_missing_ram_block() {
         let snapshot = Snapshot {
             cpu: Cpu::new(),
@@ -589,7 +591,6 @@ mod tests {
         assert_eq!(round_tripped, original);
     }
 
-    #[test]
     fn write_128k_rejects_a_missing_ram_bank() {
         let snapshot = Snapshot {
             cpu: Cpu::new(),
@@ -604,5 +605,12 @@ mod tests {
         };
 
         assert_eq!(write(&snapshot), Err(WriteError::MissingRamBank(5)));
+    }
+    /// Merged (every check kept): `write_48k_rejects_a_stack_pointer_with_nowhere_to_push_pc`, `write_48k_rejects_a_missing_ram_block`, `write_128k_rejects_a_missing_ram_bank`.
+    #[test]
+    fn write_rejections() {
+        write_48k_rejects_a_stack_pointer_with_nowhere_to_push_pc();
+        write_48k_rejects_a_missing_ram_block();
+        write_128k_rejects_a_missing_ram_bank();
     }
 }

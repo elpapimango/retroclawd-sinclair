@@ -161,7 +161,6 @@ mod tests {
         test_bus_with_rom(vec![0u8; crate::ROM_SIZE])
     }
 
-    #[test]
     fn decode_rows_splits_on_newline_and_returns_24_rows() {
         let mut bus = test_bus();
         // Row 0: one character (code 1) then NEWLINE. Rows 1-23: empty
@@ -177,7 +176,6 @@ mod tests {
         assert_eq!(rows[1], Vec::<u8>::new());
     }
 
-    #[test]
     fn decode_rows_reads_an_expanded_display_file_of_full_rows() {
         let mut bus = test_bus();
         // The expanded display file: a leading NEWLINE, then 24 rows of 32 characters each followed by a NEWLINE. Row n is
@@ -204,7 +202,6 @@ mod tests {
         assert_eq!(rows[23][0], 0xB0, "the prompt is on the last row");
     }
 
-    #[test]
     fn decode_rows_caps_a_row_at_32_bytes_when_no_newline_appears() {
         let mut bus = test_bus();
         // 40 bytes of character code 1, no terminator anywhere.
@@ -215,7 +212,6 @@ mod tests {
         assert_eq!(rows[0].len(), 32);
     }
 
-    #[test]
     fn decode_rows_skips_the_leading_sentinel_newline_so_all_24_real_rows_are_read() {
         let mut bus = test_bus();
         // Real ZX81 D_FILE format, per the ROM's own init routine (0x0403):
@@ -239,7 +235,6 @@ mod tests {
         );
     }
 
-    #[test]
     fn decode_rows_caps_at_24_rows() {
         let mut bus = test_bus();
         // 30 collapsed (immediately-terminated) rows.
@@ -248,6 +243,15 @@ mod tests {
         let rows = decode_rows(&bus, 0x4100);
 
         assert_eq!(rows.len(), 24);
+    }
+    /// Merged (every check kept): `decode_rows_splits_on_newline_and_returns_24_rows`, `decode_rows_reads_an_expanded_display_file_of_full_rows`, `decode_rows_caps_a_row_at_32_bytes_when_no_newline_appears`, `decode_rows_skips_the_leading_sentinel_newline_so_all_24_real_rows_are_read`, `decode_rows_caps_at_24_rows`.
+    #[test]
+    fn decode_rows_cases() {
+        decode_rows_splits_on_newline_and_returns_24_rows();
+        decode_rows_reads_an_expanded_display_file_of_full_rows();
+        decode_rows_caps_a_row_at_32_bytes_when_no_newline_appears();
+        decode_rows_skips_the_leading_sentinel_newline_so_all_24_real_rows_are_read();
+        decode_rows_caps_at_24_rows();
     }
 
     #[test]
@@ -260,7 +264,6 @@ mod tests {
         assert_eq!(font_row(&bus, 5, 3), 0b1010_0101);
     }
 
-    #[test]
     fn blank_display_file_renders_an_all_white_frame() {
         let mut bus = test_bus();
         bus.load(0x400C, &[0x00, 0x41]); // D_FILE pointer -> 0x4100
@@ -272,7 +275,6 @@ mod tests {
         assert!(rgb.iter().all(|&b| b == 255));
     }
 
-    #[test]
     fn border_true_pads_by_border_px_on_every_side() {
         let mut bus = test_bus();
         bus.load(0x400C, &[0x00, 0x41]);
@@ -285,8 +287,13 @@ mod tests {
         // ZX81 has no border-color register -- always white, same as paper.
         assert!(rgb.iter().all(|&b| b == 255));
     }
-
+    /// Merged (every check kept): `blank_display_file_renders_an_all_white_frame`, `border_true_pads_by_border_px_on_every_side`.
     #[test]
+    fn blank_frame_and_border() {
+        blank_display_file_renders_an_all_white_frame();
+        border_true_pads_by_border_px_on_every_side();
+    }
+
     fn known_character_renders_its_real_rom_font_bitmap() {
         let mut rom = vec![0u8; crate::ROM_SIZE];
         // Character code 1, scanline 0: 0x1E00 + 1*8 + 0 = 0x1E08.
@@ -311,7 +318,6 @@ mod tests {
         }
     }
 
-    #[test]
     fn inverse_video_character_swaps_ink_and_paper() {
         let mut rom = vec![0u8; crate::ROM_SIZE];
         rom[0x1E08] = 0b1111_0000; // same font byte as the previous test
@@ -334,7 +340,6 @@ mod tests {
         }
     }
 
-    #[test]
     fn token_range_character_renders_blank_even_when_inverse() {
         let mut bus = test_bus();
         bus.load(0x400C, &[0x00, 0x41]);
@@ -349,6 +354,13 @@ mod tests {
             let offset = px * 3;
             assert_eq!(&rgb[offset..offset + 3], &[255, 255, 255]);
         }
+    }
+    /// Merged (every check kept): `known_character_renders_its_real_rom_font_bitmap`, `inverse_video_character_swaps_ink_and_paper`, `token_range_character_renders_blank_even_when_inverse`.
+    #[test]
+    fn character_rendering() {
+        known_character_renders_its_real_rom_font_bitmap();
+        inverse_video_character_swaps_ink_and_paper();
+        token_range_character_renders_blank_even_when_inverse();
     }
 
     #[test]
