@@ -261,6 +261,11 @@ impl ZxSpectrum {
         self.bus.eject_disk();
     }
 
+    /// Takes the disk out of `drive` (0 or 1).
+    pub fn eject_disk_from(&mut self, drive: usize) {
+        self.bus.eject_disk_from(drive);
+    }
+
     /// Sets the currently loaded tape's turbo speed multiplier (1 = real
     /// time). Call after `load_tape`; a no-op if no tape is installed.
     pub fn set_tape_speed(&mut self, multiplier: u32) {
@@ -451,13 +456,21 @@ impl ZxSpectrum {
     /// silent best-effort" stance as `load_snapshot`'s own model check --
     /// there's no FDC at all to install a disk into on 48K/128K.
     pub fn load_disk(&mut self, disk: dsk::Disk) -> Result<(), String> {
+        self.load_disk_in(0, disk)
+    }
+
+    /// Puts `disk` in drive `drive` (0 = A, 1 = B, the +3's optional external drive).
+    pub fn load_disk_in(&mut self, drive: usize, disk: dsk::Disk) -> Result<(), String> {
         if self.model != Model::Spectrum2A3 {
             return Err(
                 "--disk requires --machine zx-spectrum-2a3 (no floppy disk controller on this model)"
                     .to_string(),
             );
         }
-        self.bus.load_disk(disk);
+        if drive >= nec765::DRIVES {
+            return Err(format!("drive {drive} does not exist (drives 0 and 1)"));
+        }
+        self.bus.load_disk_in(drive, disk);
         Ok(())
     }
 
@@ -467,6 +480,11 @@ impl ZxSpectrum {
         self.bus.disk()
     }
 
+    /// The disk currently in `drive` (0 or 1).
+    pub fn disk_in(&self, drive: usize) -> Option<&dsk::Disk> {
+        self.bus.disk_in(drive)
+    }
+
     /// The disk image as a `.dsk` file if it has been modified since it
     /// was inserted or last marked saved; `None` when there's nothing to
     /// persist.
@@ -474,10 +492,20 @@ impl ZxSpectrum {
         self.bus.modified_disk_image()
     }
 
+    /// `take_modified_disk_image` for `drive` (0 or 1).
+    pub fn take_modified_disk_image_of(&self, drive: usize) -> Option<Vec<u8>> {
+        self.bus.modified_disk_image_of(drive)
+    }
+
     /// Call after writing `take_modified_disk_image`'s bytes out, so the
     /// same changes aren't reported as unsaved again.
     pub fn mark_disk_saved(&mut self) {
         self.bus.mark_disk_saved();
+    }
+
+    /// `mark_disk_saved` for `drive` (0 or 1).
+    pub fn mark_disk_saved_in(&mut self, drive: usize) {
+        self.bus.mark_disk_saved_in(drive);
     }
 
     /// Performs an `OUT (port),value` on the I/O bus between instructions
@@ -1044,6 +1072,7 @@ impl ZxSpectrum {
             tape_position: self.bus.tape().map(|t| t.dump_state()),
             fdc_state: self.bus.fdc().map(|f| f.dump_state()),
             modified_disk: self.bus.modified_disk_image(),
+            modified_disk_b: self.bus.modified_disk_image_of(1),
             flash_counter: self.flash_counter,
             flash_phase: self.flash_phase,
             audio_cycle_accumulator: self.audio_cycle_accumulator,
@@ -1092,6 +1121,7 @@ impl ZxSpectrum {
             tape.restore_state(position);
         }
         self.bus.restore_disk_image(state.modified_disk)?;
+        self.bus.restore_disk_image_of(1, state.modified_disk_b)?;
         if let (Some(fdc), Some(fdc_state)) = (self.bus.fdc_mut(), state.fdc_state) {
             fdc.restore_state(fdc_state);
         }

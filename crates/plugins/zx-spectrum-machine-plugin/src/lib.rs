@@ -156,8 +156,9 @@ struct InstanceRecord {
     region: String,
     paused: bool,
     breakpoints: Vec<u16>,
-    disk_attached: bool,
-    disk_image_id: Option<String>,
+    /// Drive A and drive B.
+    disk_attached: [bool; 2],
+    disk_image_id: [Option<String>; 2],
 }
 
 impl PluginState {
@@ -469,8 +470,8 @@ fn create_machine(req: MachineCreateRequest) -> Result<MachineCreateResponse, St
             region: region_name(region).to_string(),
             paused: false,
             breakpoints: Vec::new(),
-            disk_attached: false,
-            disk_image_id: None,
+            disk_attached: [false; 2],
+            disk_image_id: [None, None],
         },
     );
 
@@ -547,6 +548,7 @@ fn load_snapshot_bytes(
 }
 
 fn attach_media(
+    slot: plugin_api::MediaSlot,
     record: &mut InstanceRecord,
     kind: MediaKind,
     name: Option<String>,
@@ -590,9 +592,13 @@ fn attach_media(
                     ));
                 }
             };
-            record.machine.load_disk(disk)?;
-            record.disk_attached = true;
-            record.disk_image_id = name;
+            let drive = match slot {
+                plugin_api::MediaSlot::Disk { drive } => usize::from(drive),
+                _ => 0,
+            };
+            record.machine.load_disk_in(drive, disk)?;
+            record.disk_attached[drive] = true;
+            record.disk_image_id[drive] = name;
             Ok(())
         }
         MediaKind::Program => {
@@ -606,6 +612,15 @@ fn attach_media(
             "unsupported media kind for zx-spectrum plugin: {:?}",
             other
         )),
+    }
+}
+
+/// A drive number from the host: the +3 has the internal drive A (0) and an optional external drive B (1).
+fn disk_drive(drive: u8) -> Result<usize, String> {
+    if drive < 2 {
+        Ok(usize::from(drive))
+    } else {
+        Err(format!("drive {drive} does not exist (drives 0 and 1)"))
     }
 }
 
@@ -624,15 +639,17 @@ fn media_snapshot(record: &InstanceRecord) -> MediaSnapshot {
     });
 
     let disks = if matches!(record.kind, SpectrumKind::Spectrum2A3) {
-        vec![DiskStatus {
-            attached: record.disk_attached,
-            image_id: record.disk_image_id.clone(),
-            drive: Some(0),
-            head: None,
-            track: None,
-            sector: None,
-            controller_phase: record.machine.overlay_fdc_phase(),
-        }]
+        (0..2)
+            .map(|drive| DiskStatus {
+                attached: record.disk_attached[drive],
+                image_id: record.disk_image_id[drive].clone(),
+                drive: Some(drive as u8),
+                head: None,
+                track: None,
+                sector: None,
+                controller_phase: record.machine.overlay_fdc_phase(),
+            })
+            .collect()
     } else {
         Vec::new()
     };
@@ -1105,13 +1122,13 @@ fn handle_machine_command(
             Ok(MachineResponse::Ack)
         }
         MachineCommand::AttachMedia {
-            slot: _,
+            slot,
             kind,
             name,
             bytes,
             options,
         } => {
-            attach_media(record, kind, name, bytes, options)?;
+            attach_media(slot, record, kind, name, bytes, options)?;
             Ok(MachineResponse::Ack)
         }
         MachineCommand::DetachMedia { slot } => match slot {
@@ -1119,38 +1136,31 @@ fn handle_machine_command(
                 record.machine.eject_tape();
                 Ok(MachineResponse::Ack)
             }
-            plugin_api::MediaSlot::Disk { drive: 0 } => {
-                record.machine.eject_disk();
-                record.disk_attached = false;
-                record.disk_image_id = None;
+            plugin_api::MediaSlot::Disk { drive } => {
+                let drive = disk_drive(drive)?;
+                record.machine.eject_disk_from(drive);
+                record.disk_attached[drive] = false;
+                record.disk_image_id[drive] = None;
                 Ok(MachineResponse::Ack)
             }
-            plugin_api::MediaSlot::Disk { drive } => {
-                Err(format!("drive {drive} does not exist (only drive 0)"))
-            }
             other => Err(format!(
-                "nothing to eject from slot {other:?} on the zx-spectrum plugin (tape or disk drive 0)"
+                "nothing to eject from slot {other:?} on the zx-spectrum plugin (tape or a disk drive)"
             )),
         },
         MachineCommand::ExportDisk {
             drive,
             only_if_modified,
         } => {
-            if drive != 0 {
-                return Err(format!("drive {drive} does not exist (only drive 0)"));
-            }
+            let drive = disk_drive(drive)?;
             let image = if only_if_modified {
-                record.machine.take_modified_disk_image()
+                record.machine.take_modified_disk_image_of(drive)
             } else {
-                record.machine.disk().map(dsk::Disk::to_bytes)
+                record.machine.disk_in(drive).map(dsk::Disk::to_bytes)
             };
             Ok(MachineResponse::DiskImage(image))
         }
         MachineCommand::MarkDiskSaved { drive } => {
-            if drive != 0 {
-                return Err(format!("drive {drive} does not exist (only drive 0)"));
-            }
-            record.machine.mark_disk_saved();
+            record.machine.mark_disk_saved_in(disk_drive(drive)?);
             Ok(MachineResponse::Ack)
         }
         MachineCommand::ExportTape { .. } => {
@@ -1559,6 +1569,73 @@ mod tests {
             }],
             options: Vec::new(),
         }
+    }
+
+    #[test]
+    fn the_plus3_has_two_drives_and_the_others_none() {
+        let disk = |name: &str, drive: u8| MachineCommand::AttachMedia {
+            slot: plugin_api::MediaSlot::Disk { drive },
+            kind: MediaKind::Disk,
+            name: Some(name.to_string()),
+            bytes: dsk::Disk::new(1).to_bytes(),
+            options: Vec::new(),
+        };
+        let export = |drive: u8| MachineCommand::ExportDisk {
+            drive,
+            only_if_modified: false,
+        };
+        let create = create_machine(create_request("zx-spectrum-2a3")).unwrap();
+        let mut guard = state().lock().unwrap();
+        let record = guard.instances.get_mut(&create.instance).unwrap();
+        assert!(matches!(
+            handle_machine_command(record, export(1)),
+            Ok(MachineResponse::DiskImage(None))
+        ));
+        handle_machine_command(record, disk("a.dsk", 0)).unwrap();
+        handle_machine_command(record, disk("b.dsk", 1)).unwrap();
+        assert_eq!(record.disk_image_id[0].as_deref(), Some("a.dsk"));
+        assert_eq!(record.disk_image_id[1].as_deref(), Some("b.dsk"));
+        for drive in 0..2 {
+            assert!(matches!(
+                handle_machine_command(record, export(drive)),
+                Ok(MachineResponse::DiskImage(Some(_)))
+            ));
+        }
+        let snapshot = media_snapshot(record);
+        assert_eq!(snapshot.disks.len(), 2);
+        assert!(snapshot.disks.iter().all(|d| d.attached));
+        // Ejecting B leaves A in; there is no drive C.
+        handle_machine_command(
+            record,
+            MachineCommand::DetachMedia {
+                slot: plugin_api::MediaSlot::Disk { drive: 1 },
+            },
+        )
+        .unwrap();
+        assert!(!record.disk_attached[1] && record.disk_attached[0]);
+        assert!(matches!(
+            handle_machine_command(record, export(1)),
+            Ok(MachineResponse::DiskImage(None))
+        ));
+        assert!(handle_machine_command(record, disk("c.dsk", 2)).is_err());
+        assert!(handle_machine_command(record, export(2)).is_err());
+        assert!(
+            handle_machine_command(record, MachineCommand::MarkDiskSaved { drive: 2 }).is_err()
+        );
+        assert!(matches!(
+            handle_machine_command(record, MachineCommand::MarkDiskSaved { drive: 1 }),
+            Ok(MachineResponse::Ack)
+        ));
+        guard.instances.remove(&create.instance);
+        drop(guard);
+
+        // A 48K has no controller to put a disk in, in either slot.
+        let create = create_machine(create_request("zx-spectrum")).unwrap();
+        let mut guard = state().lock().unwrap();
+        let record = guard.instances.get_mut(&create.instance).unwrap();
+        assert!(handle_machine_command(record, disk("a.dsk", 0)).is_err());
+        assert!(handle_machine_command(record, disk("b.dsk", 1)).is_err());
+        guard.instances.remove(&create.instance);
     }
 
     #[test]

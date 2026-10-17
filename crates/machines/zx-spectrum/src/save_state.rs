@@ -50,6 +50,8 @@ pub(crate) struct SaveState {
     /// written to it -- an unwritten disk is exactly the externally
     /// supplied image, so it stays external like ROM/tape bytes.
     pub(crate) modified_disk: Option<Vec<u8>>,
+    /// The same for drive B.
+    pub(crate) modified_disk_b: Option<Vec<u8>>,
     pub(crate) flash_counter: u8,
     pub(crate) flash_phase: bool,
     pub(crate) audio_cycle_accumulator: f64,

@@ -263,7 +263,7 @@ pub(crate) struct ZxSpectrumBus {
     fdc: Option<nec765::Fdc<dsk::Disk>>,
     /// The disk exactly as inserted, so a save state that predates any
     /// write can put the medium back (see `restore_disk_image`).
-    pristine_disk: Option<dsk::Disk>,
+    pristine_disks: [Option<dsk::Disk>; nec765::DRIVES],
     /// Position (in T-states) within the current video frame -- the ULA's
     /// own notion of "where is the electron beam right now", used to look
     /// up contended-memory wait states. Reset to `0` every real frame
@@ -437,7 +437,7 @@ impl ZxSpectrumBus {
                 fdc.set_motor(false);
                 fdc
             }),
-            pristine_disk: None,
+            pristine_disks: [None, None],
             frame_tstate: 0,
             kempston: 0,
             fuller: 0xFF,
@@ -740,12 +740,19 @@ impl ZxSpectrumBus {
         self.tape_cycles_since_edge = 0;
     }
 
-    /// Takes the disk out of the +3 drive (a no-op without an FDC).
+    /// Takes the disk out of the +3 drive A (a no-op without an FDC).
     pub(crate) fn eject_disk(&mut self) {
+        self.eject_disk_from(0);
+    }
+
+    /// Takes the disk out of `drive` (0 = A, 1 = B). The pristine copy goes too: it belongs to the disk that left.
+    pub(crate) fn eject_disk_from(&mut self, drive: usize) {
         if let Some(fdc) = &mut self.fdc {
-            fdc.eject_disk();
+            fdc.eject_disk_from(drive);
         }
-        self.pristine_disk = None;
+        if let Some(pristine) = self.pristine_disks.get_mut(drive) {
+            *pristine = None;
+        }
     }
 
     /// Sets the currently loaded tape's turbo speed multiplier (1 = real
@@ -880,30 +887,53 @@ impl ZxSpectrumBus {
     /// that field's own doc comment). `ZxSpectrum::load_disk` is where
     /// the real "wrong model" error is surfaced to the caller, same split
     /// as `load_ram_bank`'s own doc comment.
-    pub(crate) fn load_disk(&mut self, disk: dsk::Disk) {
-        if let Some(fdc) = &mut self.fdc {
-            self.pristine_disk = Some(disk.clone());
-            fdc.insert_disk(disk);
+    /// Puts `disk` in `drive` (0 = A, 1 = B), keeping a pristine copy of what went in.
+    pub(crate) fn load_disk_in(&mut self, drive: usize, disk: dsk::Disk) {
+        if drive < nec765::DRIVES
+            && let Some(fdc) = &mut self.fdc
+        {
+            self.pristine_disks[drive] = Some(disk.clone());
+            fdc.insert_disk_in(drive, disk);
         }
     }
 
-    /// The disk in the drive with every write applied.
+    /// The disk in drive A with every write applied.
     pub(crate) fn disk(&self) -> Option<&dsk::Disk> {
-        self.fdc.as_ref()?.disk()
+        self.disk_in(0)
     }
 
-    /// The modified disk serialised for a save state; `None` while the
+    /// The disk in `drive` with every write applied.
+    pub(crate) fn disk_in(&self, drive: usize) -> Option<&dsk::Disk> {
+        self.fdc.as_ref()?.disk_in(drive)
+    }
+
+    /// The modified disk of drive A serialised for a save state; `None` while the
     /// disk is untouched (then the externally supplied image is exact).
     pub(crate) fn modified_disk_image(&self) -> Option<Vec<u8>> {
-        self.disk()
+        self.modified_disk_image_of(0)
+    }
+
+    pub(crate) fn modified_disk_image_of(&self, drive: usize) -> Option<Vec<u8>> {
+        self.disk_in(drive)
             .filter(|d| d.is_modified())
             .map(dsk::Disk::to_bytes)
     }
 
-    /// Puts the drive's medium back to what a save state recorded: the
+    /// Puts drive A's medium back to what a save state recorded: the
     /// captured modified image, or (for a state taken before any write)
     /// the disk as originally inserted.
     pub(crate) fn restore_disk_image(&mut self, image: Option<Vec<u8>>) -> Result<(), String> {
+        self.restore_disk_image_of(0, image)
+    }
+
+    pub(crate) fn restore_disk_image_of(
+        &mut self,
+        drive: usize,
+        image: Option<Vec<u8>>,
+    ) -> Result<(), String> {
+        if drive >= nec765::DRIVES {
+            return Ok(());
+        }
         let Some(fdc) = &mut self.fdc else {
             return Ok(());
         };
@@ -912,22 +942,26 @@ impl ZxSpectrumBus {
                 let mut disk = dsk::parse(&bytes)
                     .map_err(|e| format!("save state disk image is invalid: {e}"))?;
                 disk.mark_modified();
-                fdc.insert_disk(disk);
+                fdc.insert_disk_in(drive, disk);
             }
             None => {
-                if fdc.disk().is_some_and(dsk::Disk::is_modified)
-                    && let Some(pristine) = self.pristine_disk.clone()
+                if fdc.disk_in(drive).is_some_and(dsk::Disk::is_modified)
+                    && let Some(pristine) = self.pristine_disks[drive].clone()
                 {
-                    fdc.insert_disk(pristine);
+                    fdc.insert_disk_in(drive, pristine);
                 }
             }
         }
         Ok(())
     }
 
-    /// Records that the current disk image has been persisted.
+    /// Records that drive A's current disk image has been persisted.
     pub(crate) fn mark_disk_saved(&mut self) {
-        if let Some(disk) = self.fdc.as_mut().and_then(nec765::Fdc::disk_mut) {
+        self.mark_disk_saved_in(0);
+    }
+
+    pub(crate) fn mark_disk_saved_in(&mut self, drive: usize) {
+        if let Some(disk) = self.fdc.as_mut().and_then(|fdc| fdc.disk_in_mut(drive)) {
             disk.clear_modified();
         }
     }
@@ -2021,7 +2055,7 @@ mod tests {
     fn fdc_command_protocol_round_trips_through_the_real_ports() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum2A3, vec![0u8; crate::ROM_SIZE_2A3]);
         let disk = dsk::parse(&build_minimal_dsk()).unwrap();
-        bus.load_disk(disk);
+        bus.load_disk_in(0, disk);
         bus.write_io(0x1FFD, 0b0000_1000); // +3 disk motor on -- the drive isn't ready otherwise
 
         bus.write_io(0x3FFD, 0x0F); // Seek
@@ -2047,10 +2081,80 @@ mod tests {
         assert_eq!(bus.read_io(0x3FFD), 0x11); // the sector's own first byte
     }
 
+    /// The minimal disk with `first` as the first byte of its only sector.
+    fn dsk_starting_with(first: u8) -> dsk::Disk {
+        let mut bytes = build_minimal_dsk();
+        let at = bytes.len() - 512;
+        bytes[at] = first;
+        dsk::parse(&bytes).unwrap()
+    }
+
+    /// Reads the first byte of sector 1 of cylinder 0 from `unit` (0 = A, 1 = B) through the +3's FDC ports.
+    fn read_first_byte_from(bus: &mut ZxSpectrumBus, unit: u8) -> u8 {
+        for byte in [0x46, unit, 0, 0, 1, 2, 1, 0x1B, 0xFF] {
+            bus.write_io(0x3FFD, byte);
+        }
+        let first = bus.read_io(0x3FFD);
+        for _ in 1..512 {
+            bus.read_io(0x3FFD);
+        }
+        for _ in 0..7 {
+            bus.read_io(0x3FFD); // the result phase
+        }
+        first
+    }
+
+    #[test]
+    fn the_plus3_reads_drive_a_and_the_external_drive_b_apart() {
+        let mut bus = ZxSpectrumBus::new(Model::Spectrum2A3, vec![0u8; crate::ROM_SIZE_2A3]);
+        bus.load_disk_in(0, dsk_starting_with(0x5A));
+        bus.load_disk_in(1, dsk_starting_with(0xC3));
+        bus.write_io(0x1FFD, 0b0000_1000); // one motor line for both drives
+        assert_eq!(read_first_byte_from(&mut bus, 0), 0x5A, "drive A");
+        assert_eq!(read_first_byte_from(&mut bus, 1), 0xC3, "drive B");
+        assert_eq!(read_first_byte_from(&mut bus, 0), 0x5A, "and back to A");
+        // Ejecting B leaves A alone, and a third drive does not exist.
+        bus.eject_disk_from(1);
+        assert!(bus.disk_in(1).is_none() && bus.disk().is_some());
+        bus.load_disk_in(2, dsk_starting_with(0));
+        assert!(bus.disk_in(2).is_none());
+    }
+
+    #[test]
+    fn the_plus3_drives_are_modified_and_saved_independently() {
+        let mut bus = ZxSpectrumBus::new(Model::Spectrum2A3, vec![0u8; crate::ROM_SIZE_2A3]);
+        bus.load_disk_in(0, dsk_starting_with(0x5A));
+        bus.load_disk_in(1, dsk_starting_with(0xC3));
+        bus.write_io(0x1FFD, 0b0000_1000);
+        assert!(bus.modified_disk_image_of(1).is_none());
+        // Write Data to unit 1 only.
+        for b in [0x45, 1, 0, 0, 1, 2, 1, 0x2A, 0xFF] {
+            bus.write_io(0x3FFD, b);
+        }
+        for _ in 0..512 {
+            bus.write_io(0x3FFD, 0x99);
+        }
+        for _ in 0..7 {
+            bus.read_io(0x3FFD);
+        }
+        assert!(
+            bus.modified_disk_image_of(1).is_some(),
+            "drive B was written"
+        );
+        assert!(bus.modified_disk_image().is_none(), "drive A was not");
+        // A save state carries drive B's image and puts it back.
+        let image = bus.modified_disk_image_of(1);
+        bus.mark_disk_saved_in(1);
+        assert!(bus.modified_disk_image_of(1).is_none());
+        bus.restore_disk_image_of(1, image).unwrap();
+        assert!(bus.modified_disk_image_of(1).is_some());
+        assert_eq!(read_first_byte_from(&mut bus, 1), 0x99);
+    }
+
     #[test]
     fn the_drive_is_not_ready_until_the_motor_is_switched_on() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum2A3, vec![0u8; crate::ROM_SIZE_2A3]);
-        bus.load_disk(dsk::parse(&build_minimal_dsk()).unwrap());
+        bus.load_disk_in(0, dsk::parse(&build_minimal_dsk()).unwrap());
         bus.write_io(0x3FFD, 0x04); // Sense Drive Status
         bus.write_io(0x3FFD, 0x00);
         assert_eq!(
@@ -2067,7 +2171,7 @@ mod tests {
     #[test]
     fn plus3_disk_writes_are_persisted_and_survive_a_save_state() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum2A3, vec![0u8; crate::ROM_SIZE_2A3]);
-        bus.load_disk(dsk::parse(&build_minimal_dsk()).unwrap());
+        bus.load_disk_in(0, dsk::parse(&build_minimal_dsk()).unwrap());
         bus.write_io(0x1FFD, 0b0000_1000);
         assert!(
             bus.modified_disk_image().is_none(),

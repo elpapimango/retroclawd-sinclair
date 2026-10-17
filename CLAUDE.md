@@ -396,6 +396,12 @@ The notes below were written in the host repository before the split and refer t
   best-effort" stance as `load_snapshot` — `restore_memory` itself can't
   safely detect a mismatch (applying a `Memory::Flat` payload onto banked
   memory, or vice versa, would silently do the wrong thing, not error).
+- **Second drive on the +3 (2026-10-17)**: `ZxSpectrumBus` keeps `pristine_disks[2]`; `ZxSpectrum::load_disk_in(drive, ..)`, `eject_disk_from`,
+  `disk_in`, `take_modified_disk_image_of`, `mark_disk_saved_in`; the save state carries `modified_disk_b`. The plugin handles
+  `MediaSlot::Disk { drive }` 0 and 1 for attach, detach, `ExportDisk` and `MarkDiskSaved` and reports two `DiskStatus` entries; the other
+  models have no controller and refuse both. One motor line (port 1FFDh bit 3) spins both drives. Tests: the bus (A and B read apart through
+  the real FDC ports, written/saved/restored independently), the plugin (per-drive commands, no drive 2, 48K refuses) and, in the host
+  suite, a program reading a sector from each unit.
 - **ZX81 tape** (2026-10-16, `zx81::tape` + `Zx81Bus`): a `.p` / `.81` / `.p81` attached as `MediaKind::Tape` becomes a
   `zx_tape::Tape` (`tape::encode`: ZXDOCS "Cassette Signals" -- bytes MSB first, a pulse is 150 us high + 150 us low, a `0` is 4
   pulses and a `1` is 9, each bit followed by 1300 us of silence, a 1 s leader instead of the listed 5 s, then the name with
