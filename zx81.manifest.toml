@@ -1,0 +1,58 @@
+machine = "zx81"
+# Goldens are the 256x192 picture only (capture_zesarux_screen.py --crop 50,41,256,192), compared with retroclawd's
+# picture without its border (--no-border), so both have the same geometry.
+args = ["--no-border"]
+
+# S4 (audio) and S7 (hardware test ROMs) are not here on purpose: the ZX81 has no sound chip (the cassette line is the only
+# audio and is covered by the hand-written suite) and no ZX81 hardware test ROM is shipped. S8 has no kind yet (playbook).
+# S5 has no reference: it checks the machine against itself (two runs save the same state, a reload continues identically).
+
+[reference]
+emulator = "zesarux"
+version = "13.0"
+command = "retroclawd-tools/scripts/capture_zesarux_screen.py ZX81 6 OUT.png --crop 50,41,256,192 [--keys 'p12*34\n' --after 1]   (zesarux --machine ZX81 --realvideo, save-screen over ZRCP)"
+
+[files]
+rom = "sinclair/roms/zx81/zx81.rom"
+
+[[scenario]]
+id = "S1"
+kind = "screen"
+frames = 150
+golden = "zx81/S1-boot.png"
+golden_sha256 = "5c05fc69f4cae3362fb705303a8e8224799a436656e6c7ef652258b401b5cfca"
+compare = { mode = "similarity", max_mad = 2.0, crop = [0.0, 0.9, 0.1, 1.0], reason = "palette and rasteriser of another emulator; the crop is the bottom-left cell, where the K cursor sits (checked: 5 frames in, before the prompt, it fails)" }
+
+[[scenario]]
+id = "S2"
+kind = "screen"
+frames = 500
+args = ["--type-delay", "160", "--type", "P12*34\n"]
+golden = "zx81/S2-print.png"
+golden_sha256 = "edf11dfa1c6950bd816fe6f4a4975c0bfd887c6af3df81b318eaf0ce1c9c9f81"
+compare = { mode = "similarity", max_mad = 2.0, crop = [0.0, 0.0, 0.12, 0.06], reason = "palette and rasteriser of another emulator; the crop is the top-left cells where PRINT 12*34 (typed P12*34 and Enter) prints 408 (checked: 90 frames in, before the typing is done, it fails)" }
+
+[[scenario]]
+id = "S3"
+kind = "screen"
+frames = 300
+files = { snapshot = "sinclair/software/zx81/hello.p" }
+golden = "zx81/S3-load.png"
+golden_sha256 = "99fb62c163966c58bd7e1cd032e4e520d62d0142386b3cc549a314010f4d94b3"
+compare = { mode = "similarity", max_mad = 2.0, crop = [0.0, 0.0, 0.2, 0.06], reason = "palette and rasteriser of another emulator; the crop is the top-left cells where the loaded program 10 PRINT \"HELLO\" (made by retroclawd-tools/scripts/make_zx81_p.py) prints HELLO. Only the .p format is covered: .p81 and tape formats are covered by the hand-written suite" }
+
+[[scenario]]
+id = "S6"
+kind = "timing"
+frames = 100
+cycles_per_frame = 64584
+cycles_tolerance = 0
+status = "known-gap"
+gap = { reason = "ZEsarUX counts 207 T-states per line (64584 per frame at 3.2292 MHz), retroclawd 208 (65003 measured); which one real hardware has is not settled", evidence = "machines/sinclair/docs/zx81-timing-gap.md" }
+
+[[scenario]]
+id = "S5"
+kind = "state"
+frames = 500
+more_frames = 100
+args = ["--type-delay", "160", "--type", "P12*34\n"]
