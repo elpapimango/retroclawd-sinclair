@@ -1718,17 +1718,25 @@ mod tests {
         assert_eq!(bus.read_io(0xFFFD), 0x15);
     }
 
-    fn turbosound_off_by_default_and_0xfe_is_just_register_15() {
+    fn turbosound_off_by_default_and_0xfe_is_not_a_chip_select() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum128, vec![0u8; crate::ROM_SIZE_128K]);
         assert!(bus.ay2().is_none());
 
-        // Without turbosound, 0xFE is a completely ordinary register
-        // select (register 14) -- must NOT be intercepted as a
-        // chip-select, matching a plain 128K's real behavior exactly.
+        // Without turbosound, 0xFE must NOT be intercepted as a
+        // chip-select; it is an ordinary register select, and a number
+        // above 15 chooses no register at all (writes ignored, reads
+        // `0xFF`) -- the AY-3-8912's own behaviour, found on a real CPC by
+        // the `psg` acid test.
         bus.write_io(0xFFFD, 0xFE);
         bus.write_io(0xBFFD, 0x07);
         bus.write_io(0xFFFD, 0xFE);
-        assert_eq!(bus.read_io(0xFFFD), 0x07);
+        assert_eq!(bus.read_io(0xFFFD), 0xFF);
+        bus.write_io(0xFFFD, 14);
+        assert_eq!(
+            bus.read_io(0xFFFD),
+            0x00,
+            "register 14 was not written through the invalid select"
+        );
     }
 
     fn turbosound_chip_select_switches_which_ay_is_addressed() {
@@ -1760,10 +1768,10 @@ mod tests {
         bus.write_io(0xFFFD, 14);
         assert_eq!(bus.read_io(0xFFFD), 0x11);
     }
-    /// Merged (every check kept): `turbosound_off_by_default_and_0xfe_is_just_register_15`, `turbosound_chip_select_switches_which_ay_is_addressed`.
+    /// Merged (every check kept): `turbosound_off_by_default_and_0xfe_is_not_a_chip_select`, `turbosound_chip_select_switches_which_ay_is_addressed`.
     #[test]
     fn turbosound_selection() {
-        turbosound_off_by_default_and_0xfe_is_just_register_15();
+        turbosound_off_by_default_and_0xfe_is_not_a_chip_select();
         turbosound_chip_select_switches_which_ay_is_addressed();
     }
 
@@ -1802,11 +1810,12 @@ mod tests {
         assert!(bus.ay2().is_none());
 
         // Now that turbosound is off, 0xFE must go back to being a plain
-        // register select (register 14) on the sole remaining chip.
+        // register select on the sole remaining chip: an invalid one, so
+        // nothing is chosen and a write changes nothing.
         bus.write_io(0xFFFD, 0xFE);
         bus.write_io(0xBFFD, 0x44);
         bus.write_io(0xFFFD, 0xFE);
-        assert_eq!(bus.read_io(0xFFFD), 0x44);
+        assert_eq!(bus.read_io(0xFFFD), 0xFF);
     }
     /// Merged (every check kept): `turbosound_chip_select_value_is_not_also_treated_as_a_register_select`, `turbosound_disabling_resets_to_the_primary_chip`.
     #[test]
