@@ -8,17 +8,17 @@ license = "GPL-3.0-or-later"
 name = "zx81_machine_plugin_impl"
 
 [dependencies]
-build-info = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "ec1bc376195bc74218b37f52d554f26e8e47407f" }
-machine = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "ec1bc376195bc74218b37f52d554f26e8e47407f" }
+build-info = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "58dc416bd378b452d63117be8d23a5bb7cc0265d" }
+machine = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "58dc416bd378b452d63117be8d23a5bb7cc0265d" }
 serde = { version = "1", features = ["derive"] }
-plugin-api = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "ec1bc376195bc74218b37f52d554f26e8e47407f" }
-z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "ec1bc376195bc74218b37f52d554f26e8e47407f" }
+plugin-api = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "58dc416bd378b452d63117be8d23a5bb7cc0265d" }
+z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "58dc416bd378b452d63117be8d23a5bb7cc0265d" }
 zx81 = { path = "../../machines/zx81" }
 zx81-snapshot = { path = "../../formats/zx81-snapshot" }
-zx-tape = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "ec1bc376195bc74218b37f52d554f26e8e47407f" }
+zx-tape = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "58dc416bd378b452d63117be8d23a5bb7cc0265d" }
 
 [dev-dependencies]
 toml = "0.8"
 
 [build-dependencies]
-build-info = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "ec1bc376195bc74218b37f52d554f26e8e47407f" }
+build-info = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "58dc416bd378b452d63117be8d23a5bb7cc0265d" }

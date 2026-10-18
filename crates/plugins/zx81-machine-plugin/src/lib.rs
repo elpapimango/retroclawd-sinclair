@@ -63,6 +63,7 @@ static MACHINE_VTABLE_V1: MachinePluginVTableV1 = MachinePluginVTableV1 {
     step: plugin_step_v1,
     halted: plugin_halted_v1,
     pc: plugin_pc_v1,
+    pc_wide: plugin_pc_wide_v1,
 };
 
 static PLUGIN_DESCRIPTOR_V1: StaticPluginDescriptor = StaticPluginDescriptor(PluginDescriptorV1 {
@@ -83,7 +84,7 @@ struct InstanceRecord {
     machine: Zx81,
     region: String,
     paused: bool,
-    breakpoints: Vec<u16>,
+    breakpoints: Vec<u64>,
 }
 
 impl PluginState {
@@ -189,6 +190,8 @@ fn machine_profile() -> MachineProfile {
             },
         ],
         key_names: key_names(),
+        cpus: Vec::new(),
+        axis_names: Vec::new(),
     }
 }
 
@@ -270,6 +273,7 @@ fn create_machine(req: MachineCreateRequest) -> Result<MachineCreateResponse, St
             notes: vec!["external machine plugin v1".to_string()],
             bitmap_palette: bitmap_palette(),
             bitmap_defaults: Some(bitmap_defaults()),
+            ..MachineMetadata::default()
         },
     })
 }
@@ -326,7 +330,11 @@ fn handle_machine_command(
         }
         MachineCommand::ReadMemory { address, len, .. } => {
             let bytes = (0..len)
-                .map(|offset| record.machine.read_memory(address.wrapping_add(offset)))
+                .map(|offset| {
+                    record
+                        .machine
+                        .read_memory(address.wrapping_add(offset.into()))
+                })
                 .collect();
             Ok(MachineResponse::Memory(bytes))
         }
@@ -537,7 +545,9 @@ fn handle_machine_command(
                 .ok_or_else(|| "render_frame unavailable for zx81".to_string())?;
             Ok(MachineResponse::Frame { width, height, rgb })
         }
-        MachineCommand::DrainAudio => Ok(MachineResponse::AudioPcmMono {
+        MachineCommand::AxisEvent { .. } => Err("this machine has no analogue axes".to_string()),
+        MachineCommand::DrainAudio => Ok(MachineResponse::AudioPcm {
+            channels: 1,
             sample_rate: AUDIO_SAMPLE_RATE,
             samples: record.machine.drain_audio(),
         }),
@@ -797,7 +807,11 @@ fn handle_debug_command(
         }
         DebugCommand::ReadMemory { address, len, .. } => {
             let bytes = (0..len)
-                .map(|offset| record.machine.read_memory(address.wrapping_add(offset)))
+                .map(|offset| {
+                    record
+                        .machine
+                        .read_memory(address.wrapping_add(offset.into()))
+                })
                 .collect();
             Ok(DebugResponse::Memory(bytes))
         }
@@ -810,7 +824,11 @@ fn handle_debug_command(
             let mut out = Vec::with_capacity(lines as usize);
             for _ in 0..lines {
                 let raw: Vec<u8> = (0..4u16)
-                    .map(|offset| record.machine.read_memory(cursor.wrapping_add(offset)))
+                    .map(|offset| {
+                        record
+                            .machine
+                            .read_memory(cursor.wrapping_add(offset.into()))
+                    })
                     .collect();
                 let (text, consumed) = z80::disassemble::disassemble(&raw);
                 let consumed = consumed.clamp(1, 4);
@@ -819,7 +837,7 @@ fn handle_debug_command(
                     bytes: raw[..consumed].to_vec(),
                     text,
                 });
-                cursor = cursor.wrapping_add(consumed as u16);
+                cursor = cursor.wrapping_add((consumed as u16).into());
             }
             Ok(DebugResponse::Disassembly(out))
         }
@@ -831,6 +849,15 @@ fn handle_debug_command(
         DebugCommand::GetChipSnapshots => {
             Ok(DebugResponse::ChipSnapshots(Vec::<ChipSnapshot>::new()))
         }
+        DebugCommand::OnCpu { cpu, command } => {
+            if cpu == "main" {
+                handle_debug_command(record, *command)
+            } else {
+                Err(format!(
+                    "unknown cpu \"{cpu}\" (this machine has only \"main\")"
+                ))
+            }
+        }
         DebugCommand::GetMachineMetadata => Ok(DebugResponse::MachineMetadata(MachineMetadata {
             machine_id: "zx81".to_string(),
             model: Some("zx81".to_string()),
@@ -838,6 +865,7 @@ fn handle_debug_command(
             notes: vec!["external machine plugin v1".to_string()],
             bitmap_palette: bitmap_palette(),
             bitmap_defaults: Some(bitmap_defaults()),
+            ..MachineMetadata::default()
         })),
     }
 }
@@ -983,10 +1011,15 @@ fn plugin_halted_inner(instance: MachineInstanceHandle) -> u8 {
 
 /// Fast path for `MachinePluginVTableV1::pc`.
 extern "C" fn plugin_pc_v1(instance: MachineInstanceHandle) -> u16 {
-    plugin_api::guard::guarded("pc", 0, || plugin_pc_inner(instance))
+    plugin_api::guard::guarded("pc", 0, || plugin_pc_inner(instance) as u16)
 }
 
-fn plugin_pc_inner(instance: MachineInstanceHandle) -> u16 {
+/// Fast path for `MachinePluginVTableV1::pc_wide`.
+extern "C" fn plugin_pc_wide_v1(instance: MachineInstanceHandle) -> u64 {
+    plugin_api::guard::guarded("pc_wide", 0, || plugin_pc_inner(instance))
+}
+
+fn plugin_pc_inner(instance: MachineInstanceHandle) -> u64 {
     let Ok(state) = state().lock() else {
         return 0;
     };

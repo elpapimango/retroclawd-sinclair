@@ -134,6 +134,7 @@ static MACHINE_VTABLE_V1: MachinePluginVTableV1 = MachinePluginVTableV1 {
     step: plugin_step_v1,
     halted: plugin_halted_v1,
     pc: plugin_pc_v1,
+    pc_wide: plugin_pc_wide_v1,
 };
 
 static PLUGIN_DESCRIPTOR_V1: StaticPluginDescriptor = StaticPluginDescriptor(PluginDescriptorV1 {
@@ -155,7 +156,7 @@ struct InstanceRecord {
     kind: SpectrumKind,
     region: String,
     paused: bool,
-    breakpoints: Vec<u16>,
+    breakpoints: Vec<u64>,
     /// Drive A and drive B.
     disk_attached: [bool; 2],
     disk_image_id: [Option<String>; 2],
@@ -242,6 +243,8 @@ fn machine_profile(kind: SpectrumKind) -> MachineProfile {
         ],
         options: zx_spectrum_options(kind),
         key_names: key_names(),
+        cpus: Vec::new(),
+        axis_names: Vec::new(),
     }
 }
 
@@ -484,6 +487,7 @@ fn create_machine(req: MachineCreateRequest) -> Result<MachineCreateResponse, St
             notes: vec!["external machine plugin v1".to_string()],
             bitmap_palette: bitmap_palette(),
             bitmap_defaults: Some(bitmap_defaults()),
+            ..MachineMetadata::default()
         },
     })
 }
@@ -605,7 +609,7 @@ fn attach_media(
             let org = option_u32(&options, "org")?.unwrap_or(0x4000);
             let org = u16::try_from(org)
                 .map_err(|_| format!("program org out of range for u16: {org}"))?;
-            record.machine.load(org, &bytes);
+            record.machine.load(org.into(), &bytes);
             Ok(())
         }
         other => Err(format!(
@@ -1084,7 +1088,11 @@ fn handle_machine_command(
         }
         MachineCommand::ReadMemory { address, len, .. } => {
             let bytes = (0..len)
-                .map(|offset| record.machine.read_memory(address.wrapping_add(offset)))
+                .map(|offset| {
+                    record
+                        .machine
+                        .read_memory(address.wrapping_add(offset.into()))
+                })
                 .collect();
             Ok(MachineResponse::Memory(bytes))
         }
@@ -1097,7 +1105,9 @@ fn handle_machine_command(
                 None => record.machine.load(address, &bytes),
                 Some(space) => {
                     let bank = ram_bank_from_space(&space)?;
-                    record.machine.write_ram_bank(bank, address, &bytes)
+                    record
+                        .machine
+                        .write_ram_bank(bank, address.try_into().unwrap(), &bytes)
                 }
             };
             Ok(MachineResponse::BytesWritten(written as u32))
@@ -1234,7 +1244,9 @@ fn handle_machine_command(
             })?;
             Ok(MachineResponse::Frame { width, height, rgb })
         }
-        MachineCommand::DrainAudio => Ok(MachineResponse::AudioPcmMono {
+        MachineCommand::AxisEvent { .. } => Err("this machine has no analogue axes".to_string()),
+        MachineCommand::DrainAudio => Ok(MachineResponse::AudioPcm {
+            channels: 1,
             sample_rate: AUDIO_SAMPLE_RATE,
             samples: record.machine.drain_audio(),
         }),
@@ -1294,7 +1306,11 @@ fn handle_debug_command(
         }
         DebugCommand::ReadMemory { address, len, .. } => {
             let bytes = (0..len)
-                .map(|offset| record.machine.read_memory(address.wrapping_add(offset)))
+                .map(|offset| {
+                    record
+                        .machine
+                        .read_memory(address.wrapping_add(offset.into()))
+                })
                 .collect();
             Ok(DebugResponse::Memory(bytes))
         }
@@ -1307,7 +1323,11 @@ fn handle_debug_command(
             let mut out = Vec::with_capacity(lines as usize);
             for _ in 0..lines {
                 let raw: Vec<u8> = (0..4u16)
-                    .map(|offset| record.machine.read_memory(cursor.wrapping_add(offset)))
+                    .map(|offset| {
+                        record
+                            .machine
+                            .read_memory(cursor.wrapping_add(offset.into()))
+                    })
                     .collect();
                 let (text, consumed) = z80::disassemble::disassemble(&raw);
                 let consumed = consumed.clamp(1, 4);
@@ -1316,7 +1336,7 @@ fn handle_debug_command(
                     bytes: raw[..consumed].to_vec(),
                     text,
                 });
-                cursor = cursor.wrapping_add(consumed as u16);
+                cursor = cursor.wrapping_add((consumed as u16).into());
             }
             Ok(DebugResponse::Disassembly(out))
         }
@@ -1324,6 +1344,15 @@ fn handle_debug_command(
         DebugCommand::GetChipSnapshots => Ok(DebugResponse::ChipSnapshots(vec![
             generic_overlay_chip_snapshot(record),
         ])),
+        DebugCommand::OnCpu { cpu, command } => {
+            if cpu == "main" {
+                handle_debug_command(record, *command)
+            } else {
+                Err(format!(
+                    "unknown cpu \"{cpu}\" (this machine has only \"main\")"
+                ))
+            }
+        }
         DebugCommand::GetMachineMetadata => Ok(DebugResponse::MachineMetadata(MachineMetadata {
             machine_id: record.kind.machine_id().to_string(),
             model: Some(record.kind.machine_id().to_string()),
@@ -1331,6 +1360,7 @@ fn handle_debug_command(
             notes: vec!["external machine plugin v1".to_string()],
             bitmap_palette: bitmap_palette(),
             bitmap_defaults: Some(bitmap_defaults()),
+            ..MachineMetadata::default()
         })),
     }
 }
@@ -1474,10 +1504,15 @@ fn plugin_halted_inner(instance: MachineInstanceHandle) -> u8 {
 
 /// Fast path for `MachinePluginVTableV1::pc`.
 extern "C" fn plugin_pc_v1(instance: MachineInstanceHandle) -> u16 {
-    plugin_api::guard::guarded("pc", 0, || plugin_pc_inner(instance))
+    plugin_api::guard::guarded("pc", 0, || plugin_pc_inner(instance) as u16)
 }
 
-fn plugin_pc_inner(instance: MachineInstanceHandle) -> u16 {
+/// Fast path for `MachinePluginVTableV1::pc_wide`.
+extern "C" fn plugin_pc_wide_v1(instance: MachineInstanceHandle) -> u64 {
+    plugin_api::guard::guarded("pc_wide", 0, || plugin_pc_inner(instance))
+}
+
+fn plugin_pc_inner(instance: MachineInstanceHandle) -> u64 {
     let Ok(state) = state().lock() else {
         return 0;
     };

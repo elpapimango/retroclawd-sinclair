@@ -1245,19 +1245,22 @@ impl Machine for ZxSpectrum {
         self.cpu.registers()
     }
 
-    fn pc(&self) -> u16 {
-        self.cpu.pc
+    fn pc(&self) -> machine::Addr {
+        u64::from(self.cpu.pc)
     }
 
-    fn read_memory(&self, addr: u16) -> u8 {
+    fn read_memory(&self, addr: machine::Addr) -> u8 {
+        let addr = addr as u16;
         self.bus.peek(addr)
     }
 
-    fn load(&mut self, addr: u16, bytes: &[u8]) -> usize {
+    fn load(&mut self, addr: machine::Addr, bytes: &[u8]) -> usize {
+        let addr = addr as u16;
         self.bus.load(addr, bytes)
     }
 
-    fn set_pc(&mut self, addr: u16) {
+    fn set_pc(&mut self, addr: machine::Addr) {
+        let addr = addr as u16;
         self.cpu.pc = addr;
     }
 
@@ -1307,8 +1310,8 @@ mod tests {
         use machine::{PortHit, PortWatch};
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         // LD A,5 ; OUT (0xFE),A ; IN A,(0xFE) ; HALT -- OUT/IN address the port as A<<8 | n.
-        spectrum.load(RAM_BASE, &[0x3E, 0x05, 0xD3, 0xFE, 0xDB, 0xFE, 0x76]);
-        spectrum.set_pc(RAM_BASE);
+        spectrum.load(RAM_BASE.into(), &[0x3E, 0x05, 0xD3, 0xFE, 0xDB, 0xFE, 0x76]);
+        spectrum.set_pc(RAM_BASE.into());
         assert!(spectrum.set_port_watches(vec![PortWatch {
             port: 0x00FE,
             mask: 0x00FF,
@@ -1339,9 +1342,12 @@ mod tests {
         use machine::{PortHit, PortWatch};
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         // LD HL,0x8000 ; LD BC,0x03FE ; OTIR -- three bytes to port 0xFE.
-        spectrum.load(RAM_BASE, &[0x21, 0x00, 0x80, 0x01, 0xFE, 0x03, 0xED, 0xB3]);
+        spectrum.load(
+            RAM_BASE.into(),
+            &[0x21, 0x00, 0x80, 0x01, 0xFE, 0x03, 0xED, 0xB3],
+        );
         spectrum.load(0x8000, &[0xA1, 0xA2, 0xA3]);
-        spectrum.set_pc(RAM_BASE);
+        spectrum.set_pc(RAM_BASE.into());
         assert!(spectrum.set_port_watches(vec![PortWatch {
             port: 0x00FE,
             mask: 0x00FF,
@@ -1360,7 +1366,11 @@ mod tests {
             })
         );
         // The block instruction is not finished: the core rewound PC to repeat it.
-        assert_eq!(spectrum.pc(), RAM_BASE + 6, "PC is back on the OTIR");
+        assert_eq!(
+            spectrum.pc(),
+            (RAM_BASE + 6).into(),
+            "PC is back on the OTIR"
+        );
     }
 
     fn write_port_is_decoded_like_a_cpu_out() {
@@ -1633,7 +1643,7 @@ mod tests {
 
     fn save_then_load_snapshot_round_trips_48k_state() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        spectrum.load(RAM_BASE, &[0x11, 0x22, 0x33]);
+        spectrum.load(RAM_BASE.into(), &[0x11, 0x22, 0x33]);
         spectrum.set_pc(0x8000);
         spectrum.bus.set_border_color(4);
 
@@ -1642,13 +1652,13 @@ mod tests {
         restored.load_snapshot(saved).unwrap();
 
         assert_eq!(restored.registers(), spectrum.registers());
-        assert_eq!(restored.read_memory(RAM_BASE), 0x11);
+        assert_eq!(restored.read_memory(RAM_BASE.into()), 0x11);
         assert_eq!(restored.bus.border_color(), 4);
     }
 
     fn save_then_load_sna_snapshot_round_trips_48k_state() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        spectrum.load(RAM_BASE, &[0x11, 0x22, 0x33]);
+        spectrum.load(RAM_BASE.into(), &[0x11, 0x22, 0x33]);
         spectrum.cpu.pc = 0x8000;
         spectrum.cpu.sp = 0x9000; // valid RAM SP -- .sna's 48K format needs sp-2 in RAM
         spectrum.bus.set_border_color(4);
@@ -1658,7 +1668,7 @@ mod tests {
         restored.load_sna_snapshot(saved).unwrap();
 
         assert_eq!(restored.registers(), spectrum.registers());
-        assert_eq!(restored.read_memory(RAM_BASE), 0x11);
+        assert_eq!(restored.read_memory(RAM_BASE.into()), 0x11);
         assert_eq!(restored.bus.border_color(), 4);
     }
 
@@ -1691,7 +1701,7 @@ mod tests {
 
     fn save_then_load_szx_snapshot_round_trips_48k_state() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        spectrum.load(RAM_BASE, &[0x11, 0x22, 0x33]);
+        spectrum.load(RAM_BASE.into(), &[0x11, 0x22, 0x33]);
         spectrum.set_pc(0x8000);
         spectrum.bus.set_border_color(4);
 
@@ -1700,7 +1710,7 @@ mod tests {
         restored.load_szx_snapshot(saved).unwrap();
 
         assert_eq!(restored.registers(), spectrum.registers());
-        assert_eq!(restored.read_memory(RAM_BASE), 0x11);
+        assert_eq!(restored.read_memory(RAM_BASE.into()), 0x11);
         assert_eq!(restored.bus.border_color(), 4);
     }
 
@@ -1759,7 +1769,7 @@ mod tests {
 
     fn save_state_then_load_state_round_trips_48k_state() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        spectrum.load(RAM_BASE, &[0x11, 0x22, 0x33]);
+        spectrum.load(RAM_BASE.into(), &[0x11, 0x22, 0x33]);
         spectrum.set_pc(0x8000);
         spectrum.bus.set_border_color(4);
         spectrum.press_key(ZxSpectrumKey::A);
@@ -1770,7 +1780,7 @@ mod tests {
         Machine::load_state(&mut restored, &bytes).unwrap();
 
         assert_eq!(restored.registers(), spectrum.registers());
-        assert_eq!(restored.read_memory(RAM_BASE), 0x11);
+        assert_eq!(restored.read_memory(RAM_BASE.into()), 0x11);
         assert_eq!(restored.bus.border_color(), 4);
         assert_eq!(restored.bus.keyboard(), spectrum.bus.keyboard());
         assert_eq!(restored.joystick_type(), JoystickType::Sinclair1);
@@ -1831,8 +1841,8 @@ mod tests {
         // NOPs -- 4 T-states each, real Z80 timing (not the beeper's own
         // level, which stays silent here -- this test is only checking
         // that `step` emits samples at the right cadence).
-        spectrum.load(RAM_BASE, &vec![0x00u8; 1000]);
-        spectrum.set_pc(RAM_BASE);
+        spectrum.load(RAM_BASE.into(), &vec![0x00u8; 1000]);
+        spectrum.set_pc(RAM_BASE.into());
 
         let mut total_cycles = 0u64;
         for _ in 0..1000 {
@@ -1855,8 +1865,8 @@ mod tests {
 
     fn drain_audio_returns_silence_when_speaker_and_ay_are_both_quiet() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        spectrum.load(RAM_BASE, &[0x00u8; 200]);
-        spectrum.set_pc(RAM_BASE);
+        spectrum.load(RAM_BASE.into(), &[0x00u8; 200]);
+        spectrum.set_pc(RAM_BASE.into());
         for _ in 0..200 {
             spectrum.step();
         }
@@ -1881,8 +1891,8 @@ mod tests {
         spectrum.bus.write_io(0xFFFD, 8); // register 8: channel A volume
         spectrum.bus.write_io(0xBFFD, 0x0F); // max, no envelope
 
-        spectrum.load(RAM_BASE, &vec![0x00u8; 4000]);
-        spectrum.set_pc(RAM_BASE);
+        spectrum.load(RAM_BASE.into(), &vec![0x00u8; 4000]);
+        spectrum.set_pc(RAM_BASE.into());
         for _ in 0..4000 {
             spectrum.step();
         }
@@ -1900,8 +1910,8 @@ mod tests {
         // enough NOPs to cross at least one audio sample boundary.
         let mut program = vec![0x3E, 0b0001_0000, 0xD3, 0xFE];
         program.extend(vec![0x00u8; 200]);
-        spectrum.load(RAM_BASE, &program);
-        spectrum.set_pc(RAM_BASE);
+        spectrum.load(RAM_BASE.into(), &program);
+        spectrum.set_pc(RAM_BASE.into());
         for _ in 0..204 {
             spectrum.step();
         }
@@ -1913,8 +1923,8 @@ mod tests {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         let mut program = vec![0x3E, 0b0001_0000, 0xD3, 0xFE]; // beeper on
         program.extend(vec![0x00u8; 200]);
-        spectrum.load(RAM_BASE, &program);
-        spectrum.set_pc(RAM_BASE);
+        spectrum.load(RAM_BASE.into(), &program);
+        spectrum.set_pc(RAM_BASE.into());
         for _ in 0..204 {
             spectrum.step();
         }
@@ -1930,8 +1940,8 @@ mod tests {
         spectrum.set_speaker_type(SpeakerType::Beeper);
         let mut program = vec![0x3E, 0b0001_0000, 0xD3, 0xFE]; // beeper on
         program.extend(vec![0x00u8; 200]);
-        spectrum.load(RAM_BASE, &program);
-        spectrum.set_pc(RAM_BASE);
+        spectrum.load(RAM_BASE.into(), &program);
+        spectrum.set_pc(RAM_BASE.into());
         for _ in 0..204 {
             spectrum.step();
         }
@@ -1951,8 +1961,8 @@ mod tests {
 
     fn drain_audio_empties_the_buffer() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        spectrum.load(RAM_BASE, &[0x00u8; 200]);
-        spectrum.set_pc(RAM_BASE);
+        spectrum.load(RAM_BASE.into(), &[0x00u8; 200]);
+        spectrum.set_pc(RAM_BASE.into());
         for _ in 0..200 {
             spectrum.step();
         }
@@ -2235,8 +2245,8 @@ mod tests {
     fn a_tape_does_not_start_when_the_keyboard_port_is_read() {
         // The ROM's keyboard scan reads port 0xFE from power-on; a loaded tape must not run then.
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        spectrum.load(RAM_BASE, &vec![0x00u8; 1000]);
-        spectrum.set_pc(RAM_BASE);
+        spectrum.load(RAM_BASE.into(), &vec![0x00u8; 1000]);
+        spectrum.set_pc(RAM_BASE.into());
         spectrum.load_tape(tap_block(0x00, &[0x00, 0x00]));
         spectrum.bus.read_io(0x00FE);
         spectrum.bus.read_io(0x7FFE);
@@ -2250,8 +2260,8 @@ mod tests {
         // Not before: the loader at 0x0556 is where Play is pressed.
         assert!(spectrum.bus.tape_mut().is_some_and(|t| !t.finished()));
         spectrum.step(); // executes INC D at 0x0556 and presses Play first
-        spectrum.load(RAM_BASE, &vec![0x00u8; 1000]);
-        spectrum.set_pc(RAM_BASE);
+        spectrum.load(RAM_BASE.into(), &vec![0x00u8; 1000]);
+        spectrum.set_pc(RAM_BASE.into());
         assert!(tape_ran_for_6000_nops(&mut spectrum));
     }
 
@@ -2259,8 +2269,8 @@ mod tests {
     fn any_read_mode_starts_the_tape_at_the_first_port_read() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
         spectrum.set_tape_start_on_any_read(true);
-        spectrum.load(RAM_BASE, &vec![0x00u8; 1000]);
-        spectrum.set_pc(RAM_BASE);
+        spectrum.load(RAM_BASE.into(), &vec![0x00u8; 1000]);
+        spectrum.set_pc(RAM_BASE.into());
         spectrum.load_tape(tap_block(0x00, &[0x00, 0x00]));
         spectrum.bus.read_io(0x00FE);
         assert!(tape_ran_for_6000_nops(&mut spectrum));
@@ -2269,8 +2279,8 @@ mod tests {
     #[test]
     fn tape_pulse_widths_report_real_pilot_tone_timing() {
         let mut spectrum = ZxSpectrum::new(vec![0; ROM_SIZE], Region::Pal, Model::Spectrum48);
-        spectrum.load(RAM_BASE, &vec![0x00u8; 1000]); // NOPs, real per-instruction 4T granularity
-        spectrum.set_pc(RAM_BASE);
+        spectrum.load(RAM_BASE.into(), &vec![0x00u8; 1000]); // NOPs, real per-instruction 4T granularity
+        spectrum.set_pc(RAM_BASE.into());
         spectrum.load_tape(tap_block(0x00, &[0x00, 0x00]));
         // Press Play (the machine does this when the ROM's LD-BYTES is entered).
         spectrum.bus.start_tape();

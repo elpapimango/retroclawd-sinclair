@@ -289,7 +289,10 @@ impl Zx81 {
     pub fn save_p_snapshot(&self) -> Result<zx81_snapshot::Snapshot, String> {
         const E_LINE: u16 = 0x4014;
         const START: u16 = 0x4009;
-        let e_line = u16::from_le_bytes([self.read_memory(E_LINE), self.read_memory(E_LINE + 1)]);
+        let e_line = u16::from_le_bytes([
+            self.read_memory(E_LINE.into()),
+            self.read_memory((E_LINE + 1).into()),
+        ]);
         let ram_end = self.bus.ram_end();
         if e_line <= START || e_line > ram_end {
             return Err(format!(
@@ -299,7 +302,9 @@ impl Zx81 {
         }
         Ok(zx81_snapshot::Snapshot {
             program_name_raw: None,
-            data: (START..e_line).map(|a| self.read_memory(a)).collect(),
+            data: (START..e_line)
+                .map(|a| self.read_memory(a.into()))
+                .collect(),
         })
     }
 
@@ -407,19 +412,22 @@ impl Machine for Zx81 {
         self.cpu.registers()
     }
 
-    fn pc(&self) -> u16 {
-        self.cpu.pc
+    fn pc(&self) -> machine::Addr {
+        u64::from(self.cpu.pc)
     }
 
-    fn read_memory(&self, addr: u16) -> u8 {
+    fn read_memory(&self, addr: machine::Addr) -> u8 {
+        let addr = addr as u16;
         self.bus.peek(addr)
     }
 
-    fn load(&mut self, addr: u16, bytes: &[u8]) -> usize {
+    fn load(&mut self, addr: machine::Addr, bytes: &[u8]) -> usize {
+        let addr = addr as u16;
         self.bus.load(addr, bytes)
     }
 
-    fn set_pc(&mut self, addr: u16) {
+    fn set_pc(&mut self, addr: machine::Addr) {
+        let addr = addr as u16;
         self.cpu.pc = addr;
     }
 
@@ -463,8 +471,8 @@ mod tests {
         use machine::{PortHit, PortWatch};
         let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
         // LD A,0 ; OUT (0xFE),A ; HALT
-        zx81.load(RAM_BASE, &[0x3E, 0x00, 0xD3, 0xFE, 0x76]);
-        zx81.set_pc(RAM_BASE);
+        zx81.load(RAM_BASE.into(), &[0x3E, 0x00, 0xD3, 0xFE, 0x76]);
+        zx81.set_pc(RAM_BASE.into());
         assert!(zx81.set_port_watches(vec![PortWatch {
             port: 0x00FE,
             mask: 0x00FF,
@@ -507,8 +515,8 @@ mod tests {
     fn the_maskable_interrupt_follows_bit_6_of_r() {
         let run = |r: u64, iff1: u64| {
             let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
-            zx81.load(RAM_BASE, &[0x00; 8]);
-            zx81.set_pc(RAM_BASE);
+            zx81.load(RAM_BASE.into(), &[0x00; 8]);
+            zx81.set_pc(RAM_BASE.into());
             zx81.set_register("IM", 1).unwrap();
             zx81.set_register("IFF1", iff1).unwrap();
             zx81.set_register("R", r).unwrap();
@@ -534,8 +542,8 @@ mod tests {
 
     fn nmi_does_not_fire_while_generator_is_stopped() {
         let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
-        zx81.load(RAM_BASE, &[0x00; 100]); // 100 NOPs
-        zx81.set_pc(RAM_BASE);
+        zx81.load(RAM_BASE.into(), &[0x00; 100]); // 100 NOPs
+        zx81.set_pc(RAM_BASE.into());
 
         for _ in 0..100 {
             zx81.step();
@@ -552,8 +560,8 @@ mod tests {
         // enough NOPs to cross NMI_PERIOD_TSTATES (208).
         let mut program = vec![0xD3, 0xFE];
         program.extend(std::iter::repeat_n(0x00u8, 100));
-        zx81.load(RAM_BASE, &program);
-        zx81.set_pc(RAM_BASE);
+        zx81.load(RAM_BASE.into(), &program);
+        zx81.set_pc(RAM_BASE.into());
 
         let fired = (0..60).any(|_| {
             zx81.step();
@@ -646,18 +654,22 @@ mod tests {
         let data = tape_file(300);
         zx81.load_tape_file(&[0x26 | 0x80], &data);
         zx81.set_fast_tape_load(true);
-        zx81.set_pc(LOAD_DATA_ENTRY);
+        zx81.set_pc(LOAD_DATA_ENTRY.into());
 
         zx81.step();
 
         for (i, byte) in data.iter().enumerate() {
-            assert_eq!(zx81.read_memory(0x4009 + i as u16), *byte, "byte {i}");
+            assert_eq!(
+                zx81.read_memory((0x4009 + i as u16).into()),
+                *byte,
+                "byte {i}"
+            );
         }
         // The stub ROM has a NOP at the tail, so the step ran it and moved on.
         assert_eq!(pc_of(&zx81), u64::from(LOAD_DONE + 1));
         // The "tape" is consumed: a second pass through the loop does nothing.
         zx81.load(0x4009, &[0; 4]);
-        zx81.set_pc(LOAD_DATA_ENTRY);
+        zx81.set_pc(LOAD_DATA_ENTRY.into());
         zx81.step();
         assert_eq!(zx81.read_memory(0x4009), 0);
     }
@@ -668,7 +680,7 @@ mod tests {
                 Zx81::with_ram_kb(rom_with_load_data_entry(), Region::Pal, ram_kb).unwrap();
             zx81.load_tape_file(&[0x26 | 0x80], &tape_file(len));
             zx81.set_fast_tape_load(fast);
-            zx81.set_pc(LOAD_DATA_ENTRY);
+            zx81.set_pc(LOAD_DATA_ENTRY.into());
             zx81.step();
             zx81.read_memory(0x4009)
         };
@@ -713,7 +725,7 @@ mod tests {
     #[test]
     fn save_state_then_load_state_round_trips_state() {
         let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
-        zx81.load(RAM_BASE, &[0x11, 0x22, 0x33]);
+        zx81.load(RAM_BASE.into(), &[0x11, 0x22, 0x33]);
         zx81.set_pc(0x4010);
         zx81.press_key(Zx81Key::Q);
         zx81.bus.set_nmi_generator_running(true);
@@ -723,7 +735,7 @@ mod tests {
         Machine::load_state(&mut restored, &bytes).unwrap();
 
         assert_eq!(restored.registers(), zx81.registers());
-        assert_eq!(restored.read_memory(RAM_BASE), 0x11);
+        assert_eq!(restored.read_memory(RAM_BASE.into()), 0x11);
         assert!(restored.bus.nmi_generator_running());
         assert_eq!(scan_row(&mut restored, 0b1111_1011), 0b0111_1110);
     }
@@ -740,8 +752,8 @@ mod tests {
     /// own keyboard scan uses, so this exercises `Zx81Bus::read_io` and
     /// `KeyboardMatrix` together rather than testing either in isolation.
     fn scan_row(zx81: &mut Zx81, row_mask: u8) -> u8 {
-        zx81.load(RAM_BASE, &[0x3E, row_mask, 0xDB, 0xFE, 0x76]);
-        zx81.set_pc(RAM_BASE);
+        zx81.load(RAM_BASE.into(), &[0x3E, row_mask, 0xDB, 0xFE, 0x76]);
+        zx81.set_pc(RAM_BASE.into());
         zx81.run(&mut |m| !m.halted());
         (zx81.registers()[0].1 >> 8) as u8
     }
