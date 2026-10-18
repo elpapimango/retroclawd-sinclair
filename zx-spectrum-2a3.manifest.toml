@@ -1,0 +1,49 @@
+machine = "zx-spectrum-2a3"
+# Goldens are the 256x192 picture only (capture_zesarux_screen.py --crop 48,56,256,192; the border is not compared),
+# compared with retroclawd's picture without its border (--no-border).
+# Not covered: S2 (typed input) because ZEsarUX's ASCII typing cannot move the start menu's selection (cursor keys), so
+# there is no way to reach +3 BASIC in the reference; the +3 disk (.dsk) is not in a scenario yet; S4 (beeper, AY) and S7 (hardware test ROMs) are not here yet.
+args = ["--no-border"]
+
+[reference]
+emulator = "zesarux"
+version = "13.0"
+command = "retroclawd-tools/scripts/capture_zesarux_screen.py P341 6 OUT.png --crop 48,56,256,192 [--load FILE --seconds 25]   (zesarux --machine P341 --realvideo, save-screen over ZRCP)"
+
+[files]
+rom = "sinclair/roms/zx-spectrum/plus3.rom"
+
+[[scenario]]
+id = "S1"
+kind = "screen"
+frames = 250
+golden = "zxs3/S1-boot-341.png"
+golden_sha256 = "ac1e43faca3b47a9379366d025e92b6726303d373880fda89cf9ea008dbde05e"
+compare = { mode = "similarity", normalize = true, max_mad = 2.0, crop = [0.23, 0.30, 0.65, 0.5], reason = "the other emulator draws the Spectrum non-bright white as 0xC0 and ours as 0xCD; the crop is inside the start menu box (Loader, +3 BASIC, Calculator, 48 BASIC), which is bright white and so identical in both, the pictures having been compared pixel by pixel and differing only in that ground colour" }
+
+# The start menu opens on Loader: Enter loads with the tape attached; --fast-tape-load keeps the run short.
+[[scenario]]
+id = "S3-tap"
+kind = "screen"
+frames = 900
+args = ["--fast-tape-load"]
+files = { tape = "sinclair/software/scenarios/spectrum-hello.tap" }
+actions = ["150:key_down=Enter", "158:key_up=Enter"]
+golden = "zxs3/S3-tap.png"
+golden_sha256 = "28d4ea746be184517a9d9de5e5896bfda3b97554690e1e53c46511c07d38456e"
+compare = { mode = "similarity", normalize = true, max_mad = 2.0, crop = [0.0, 0.0, 0.2, 0.06], reason = "the other emulator draws the Spectrum white as 0xC0 and ours as 0xCD (normalize stretches both pictures to the full range) and rasterises differently; the crop is the top-left cells where the loaded program (a .tap with a BASIC loader made by rcld) writes HELLO" }
+
+[[scenario]]
+id = "S5"
+kind = "state"
+frames = 400
+more_frames = 100
+actions = ["150:key_down=Enter", "158:key_up=Enter"]
+
+# S6: the machine runs whole instructions, so a frame ends up to one instruction (at most 23 T-states) late.
+[[scenario]]
+id = "S6"
+kind = "timing"
+frames = 100
+cycles_per_frame = 70908
+cycles_tolerance = 23

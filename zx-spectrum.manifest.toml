@@ -1,0 +1,85 @@
+machine = "zx-spectrum"
+# Goldens are the 256x192 picture only (capture_zesarux_screen.py --crop 48,56,256,192; the border is not compared),
+# compared with retroclawd's picture without its border (--no-border), so both have the same geometry.
+# S4 (the beeper) and S7 (hardware test ROMs: z80test and the acid suites run in the hand-written suite) are not here yet.
+args = ["--no-border"]
+
+[reference]
+emulator = "zesarux"
+version = "13.0"
+command = "retroclawd-tools/scripts/capture_zesarux_screen.py 48k 6 OUT.png --crop 48,56,256,192 [--keys 'p12*34\n' --after 1 | --load FILE]   (zesarux --machine 48k --realvideo, save-screen over ZRCP)"
+
+[files]
+rom = "sinclair/roms/zx-spectrum/spec48.rom"
+
+[[scenario]]
+id = "S1"
+kind = "screen"
+frames = 250
+golden = "zxs48/S1-boot.png"
+golden_sha256 = "5a9dcc5e1beb38314ab98836f67de942b0d4aff497150d38de6d9f4078d4ff10"
+compare = { mode = "similarity", normalize = true, max_mad = 2.0, crop = [0.0, 0.94, 1.0, 1.0], reason = "the other emulator draws the Spectrum white as 0xC0 and ours as 0xCD (normalize stretches both pictures to the full range) and rasterises differently; the crop is the bottom text row holding the copyright message" }
+
+[[scenario]]
+id = "S2"
+kind = "screen"
+frames = 400
+args = ["--type", "P12*34\n"]
+golden = "zxs48/S2-print.png"
+golden_sha256 = "71a346648f8b6159690716cfc8b6fcc71898551e2c342e1e2c2d3ca8161df542"
+compare = { mode = "similarity", normalize = true, max_mad = 2.0, crop = [0.0, 0.0, 0.15, 0.06], reason = "the other emulator draws the Spectrum white as 0xC0 and ours as 0xCD (normalize stretches both pictures to the full range) and rasterises differently; the crop is the top-left cells where PRINT 12*34 (typed P 12 * 34 and Enter) prints 408" }
+
+[[scenario]]
+id = "S3-sna"
+kind = "screen"
+frames = 30
+files = { snapshot = "sinclair/software/scenarios/spectrum-hello.sna" }
+golden = "zxs48/S3-sna.png"
+golden_sha256 = "2ad14d69033699a2b769fe49cf37efb7bbc250277e7f9f211f8e7d637afcd33f"
+compare = { mode = "similarity", normalize = true, max_mad = 2.0, crop = [0.0, 0.0, 0.2, 0.06], reason = "the other emulator draws the Spectrum white as 0xC0 and ours as 0xCD (normalize stretches both pictures to the full range) and rasterises differently; the crop is the top-left cells where the loaded program (scenarios/spectrum/hello.asm, built by rcld into .sna) writes HELLO. One golden serves every snapshot format: the picture must not depend on the format" }
+
+[[scenario]]
+id = "S3-z80"
+kind = "screen"
+frames = 30
+files = { snapshot = "sinclair/software/scenarios/spectrum-hello.z80" }
+golden = "zxs48/S3-sna.png"
+golden_sha256 = "2ad14d69033699a2b769fe49cf37efb7bbc250277e7f9f211f8e7d637afcd33f"
+compare = { mode = "similarity", normalize = true, max_mad = 2.0, crop = [0.0, 0.0, 0.2, 0.06], reason = "the other emulator draws the Spectrum white as 0xC0 and ours as 0xCD (normalize stretches both pictures to the full range) and rasterises differently; the crop is the top-left cells where the loaded program (scenarios/spectrum/hello.asm, built by rcld into .z80) writes HELLO. One golden serves every snapshot format: the picture must not depend on the format" }
+
+[[scenario]]
+id = "S3-szx"
+kind = "screen"
+frames = 30
+files = { snapshot = "sinclair/software/scenarios/spectrum-hello.szx" }
+golden = "zxs48/S3-sna.png"
+golden_sha256 = "2ad14d69033699a2b769fe49cf37efb7bbc250277e7f9f211f8e7d637afcd33f"
+compare = { mode = "similarity", normalize = true, max_mad = 2.0, crop = [0.0, 0.0, 0.2, 0.06], reason = "the other emulator draws the Spectrum white as 0xC0 and ours as 0xCD (normalize stretches both pictures to the full range) and rasterises differently; the crop is the top-left cells where the loaded program (scenarios/spectrum/hello.asm, built by rcld into .szx) writes HELLO. One golden serves every snapshot format: the picture must not depend on the format" }
+
+# LOAD "" is typed with the key spacing the 48K ROM's scan needs (J, Symbol Shift + P twice, Enter); --fast-tape-load
+# keeps the run short (the real-time tape path is covered by the hand-written suite).
+[[scenario]]
+id = "S3-tap"
+kind = "screen"
+frames = 900
+args = ["--fast-tape-load"]
+files = { tape = "sinclair/software/scenarios/spectrum-hello.tap" }
+actions = ["150:key_down=KeyJ", "158:key_up=KeyJ", "168:key_down=SymShift", "176:key_down=KeyP", "184:key_up=KeyP", "196:key_down=KeyP", "204:key_up=KeyP", "212:key_up=SymShift", "222:key_down=Enter", "230:key_up=Enter"]
+golden = "zxs48/S3-tap.png"
+golden_sha256 = "28d4ea746be184517a9d9de5e5896bfda3b97554690e1e53c46511c07d38456e"
+compare = { mode = "similarity", normalize = true, max_mad = 2.0, crop = [0.0, 0.0, 0.2, 0.06], reason = "the other emulator draws the Spectrum white as 0xC0 and ours as 0xCD (normalize stretches both pictures to the full range) and rasterises differently; the crop is the top-left cells where the loaded program (a .tap with a BASIC loader made by rcld) writes HELLO" }
+
+[[scenario]]
+id = "S5"
+kind = "state"
+frames = 400
+more_frames = 100
+args = ["--type", "P12*34\n"]
+
+# S6: the machine runs whole instructions, so a frame ends up to one instruction (at most 23 T-states) late.
+[[scenario]]
+id = "S6"
+kind = "timing"
+frames = 100
+cycles_per_frame = 69888
+cycles_tolerance = 23
