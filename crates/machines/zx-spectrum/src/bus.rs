@@ -1505,21 +1505,26 @@ impl Bus for ZxSpectrumBus {
         }
         if port & 0x0001 == 0 {
             let mut value = self.keyboard.read(port);
-            // Real port 0xFE bit 6 = EAR input (verified against the
-            // World of Spectrum 48K reference, see CREDITS.md);
-            // `keyboard.read` already leaves bit 6 set (idle-high) by
-            // default, so only clear it when a tape's current pulse is
-            // low. With `tape_start_on_any_read`, reading this bit at all
-            // also starts playback (see TapePlayer::play's own doc comment
-            // for why that's a safe no-op once already playing or finished).
+            // Real port 0xFE bit 6 = EAR input (World of Spectrum 48K
+            // reference, see CREDITS.md). With nothing playing the input
+            // reads low, so an idle read with no keys is 0xBF (confirmed by
+            // Patrik Rak's z80test, whose IN tests expect it on a real
+            // 48K); `keyboard.read` leaves the bit set, so it is cleared
+            // here unless a tape is playing and its current pulse is high.
+            // With `tape_start_on_any_read`, reading this bit at all also
+            // starts playback (see TapePlayer::play's own doc comment for
+            // why that's a safe no-op once already playing or finished).
             let start = self.tape_start_on_any_read;
+            let mut ear = false;
             if let Some(tape) = &mut self.tape {
                 if start {
                     tape.play();
                 }
-                if !tape.ear_bit() {
-                    value &= 0b1011_1111;
-                }
+                let state = tape.playback_state();
+                ear = state.playing && !state.finished && tape.ear_bit();
+            }
+            if !ear {
+                value &= 0b1011_1111;
             }
             value
         } else {
@@ -1892,10 +1897,10 @@ mod tests {
         assert!(bus.ay().is_some());
     }
 
-    fn tape_ear_bit_is_idle_high_with_no_tape_installed() {
+    fn tape_ear_bit_is_low_with_no_tape_installed() {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
-        // Bit 6 set (idle) even before any tape is ever installed.
-        assert_eq!(bus.read_io(0x00FE) & 0b0100_0000, 0b0100_0000);
+        // Bit 6 low (no signal) even before any tape is ever installed.
+        assert_eq!(bus.read_io(0x00FE) & 0b0100_0000, 0);
     }
 
     fn tape_first_read_auto_starts_playback_and_bit6_reflects_the_first_pulse() {
@@ -1914,10 +1919,10 @@ mod tests {
         let second_read = bus.read_io(0x00FE);
         assert_eq!(second_read & 0b0100_0000, 0b0100_0000);
     }
-    /// Merged (every check kept): `tape_ear_bit_is_idle_high_with_no_tape_installed`, `tape_first_read_auto_starts_playback_and_bit6_reflects_the_first_pulse`.
+    /// Merged (every check kept): `tape_ear_bit_is_low_with_no_tape_installed`, `tape_first_read_auto_starts_playback_and_bit6_reflects_the_first_pulse`.
     #[test]
     fn tape_ear_bit() {
-        tape_ear_bit_is_idle_high_with_no_tape_installed();
+        tape_ear_bit_is_low_with_no_tape_installed();
         tape_first_read_auto_starts_playback_and_bit6_reflects_the_first_pulse();
     }
 
@@ -2187,7 +2192,7 @@ mod tests {
         // byte of 0xFE) has bit 5 set, so it's never mistaken for Kempston.
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.press_kempston(KempstonButton::Fire);
-        assert_eq!(bus.read_io(0xFEFE), 0xFF); // idle-high keyboard read, unaffected by Kempston state
+        assert_eq!(bus.read_io(0xFEFE), 0xBF); // idle-high keyboard read, unaffected by Kempston state
     }
 
     fn releasing_an_already_released_kempston_button_is_a_no_op() {
@@ -2218,7 +2223,7 @@ mod tests {
         let mut bus = ZxSpectrumBus::new(Model::Spectrum48, vec![0u8; crate::ROM_SIZE]);
         bus.press_fuller(FullerButton::Fire);
         assert_eq!(bus.read_io(0x1F), 0x00); // Kempston idle, unaffected
-        assert_eq!(bus.read_io(0xFEFE), 0xFF); // keyboard idle-high, unaffected
+        assert_eq!(bus.read_io(0xFEFE), 0xBF); // keyboard idle-high, unaffected
     }
 
     fn releasing_an_already_released_fuller_button_is_a_no_op() {
@@ -2302,7 +2307,7 @@ mod tests {
         bus.move_mouse(9, 0); // mouse_x != 0, so a wrongly-matched read would be visibly wrong
         // Real keyboard idle-high read on row-select byte 0xFB (bits 10:8
         // of the resulting port == 0b011, same as the mouse X port).
-        assert_eq!(bus.read_io(0xFBFE), 0xFF);
+        assert_eq!(bus.read_io(0xFBFE), 0xBF);
     }
     /// Merged (every check kept): `mouse_never_intercepts_the_kempston_joystick_or_fuller_ports`, `mouse_x_decode_does_not_swallow_a_keyboard_row_whose_mask_ends_in_011`.
     #[test]
