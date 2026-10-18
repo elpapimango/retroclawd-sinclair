@@ -3,8 +3,8 @@ machine = "zx81"
 # picture without its border (--no-border), so both have the same geometry.
 args = ["--no-border"]
 
-# S4 (audio) and S7 (hardware test ROMs) are not here on purpose: the ZX81 has no sound chip (the cassette line is the only
-# audio and is covered by the hand-written suite) and no ZX81 hardware test ROM is shipped. S8 has no kind yet (playbook).
+# S7 (hardware test ROMs) is not here on purpose: no ZX81 hardware test ROM is shipped. S4 is a silence check: the ZX81 has no
+# sound chip (the cassette line is the only audio and is covered by the hand-written suite). S8 has no kind yet (playbook).
 # S5 has no reference: it checks the machine against itself (two runs save the same state, a reload continues identically).
 
 [reference]
@@ -49,6 +49,12 @@ cycles_per_frame = 64584
 cycles_tolerance = 0
 status = "known-gap"
 gap = { reason = "ZEsarUX counts 207 T-states per line (64584 per frame at 3.2292 MHz), retroclawd 208 (65003 measured); which one real hardware has is not settled", evidence = "machines/sinclair/docs/zx81-timing-gap.md" }
+
+[[scenario]]
+id = "S4"
+kind = "audio"
+frames = 300
+audio = { from_s = 1.0, to_s = 6.0, silent_below_rms = 0.005 }
 
 [[scenario]]
 id = "S5"

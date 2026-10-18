@@ -10,3 +10,9 @@ for ext in tap sna z80 szx; do
   "$tools/rcld" build "$here/spectrum/hello.toml" -o "$out/spectrum-hello.$ext" --force
 done
 python3 "$here/../../../../retroclawd-tools/scripts/make_zx81_p.py" "$here/../software/zx81/hello.p"
+for name in beep ay; do
+  for ext in tap sna; do
+    [ "$name$ext" = "aysna" ] && continue
+    "$tools/rcld" build "$here/spectrum/$name.toml" -o "$out/spectrum-$name.$ext" --force
+  done
+done

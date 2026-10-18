@@ -33,6 +33,18 @@ golden = "zxs3/S3-tap.png"
 golden_sha256 = "28d4ea746be184517a9d9de5e5896bfda3b97554690e1e53c46511c07d38456e"
 compare = { mode = "similarity", normalize = true, max_mad = 2.0, crop = [0.0, 0.0, 0.2, 0.06], reason = "the other emulator draws the Spectrum white as 0xC0 and ours as 0xCD (normalize stretches both pictures to the full range) and rasterises differently; the crop is the top-left cells where the loaded program (a .tap with a BASIC loader made by rcld) writes HELLO" }
 
+# S4: channel A of the AY plays a steady tone (scenarios/spectrum/ay.asm, period 213, loaded from the tape like S3). ZEsarUX
+# 13.0 (P341, recorded 18-28 s): 518.3 Hz at amplitude 0.24 (its AY clock is about 0.4 % below 1.7734 MHz); retroclawd: 520.14 Hz
+# at amplitude 0.105. The pitch is the check, within 1 %; the level is a mixer choice.
+[[scenario]]
+id = "S4"
+kind = "audio"
+frames = 1100
+args = ["--fast-tape-load"]
+files = { tape = "sinclair/software/scenarios/spectrum-ay.tap" }
+actions = ["150:key_down=Enter", "158:key_up=Enter"]
+audio = { from_s = 15.0, to_s = 20.0, tone_hz = 518.3, tone_tolerance_pct = 1.0, min_amplitude = 0.05 }
+
 [[scenario]]
 id = "S5"
 kind = "state"

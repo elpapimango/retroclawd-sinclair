@@ -69,6 +69,16 @@ golden = "zxs48/S3-tap.png"
 golden_sha256 = "28d4ea746be184517a9d9de5e5896bfda3b97554690e1e53c46511c07d38456e"
 compare = { mode = "similarity", normalize = true, max_mad = 2.0, crop = [0.0, 0.0, 0.2, 0.06], reason = "the other emulator draws the Spectrum white as 0xC0 and ours as 0xCD (normalize stretches both pictures to the full range) and rasterises differently; the crop is the top-left cells where the loaded program (a .tap with a BASIC loader made by rcld) writes HELLO" }
 
+# S4: the beeper plays a square tone (scenarios/spectrum/beep.asm: half period 3360 T-states, so clock / 6720). ZEsarUX 13.0
+# (--aofile, recorded 4-8 s): 519.99 Hz at amplitude 0.49; retroclawd: 519.98 Hz at amplitude 0.19. The pitch is the check;
+# the level is a mixer choice (documented as hand-picked in the machine's notes), so only "clearly audible" is required.
+[[scenario]]
+id = "S4"
+kind = "audio"
+frames = 450
+files = { snapshot = "sinclair/software/scenarios/spectrum-beep.sna" }
+audio = { from_s = 4.0, to_s = 8.0, tone_hz = 520.0, tone_tolerance_pct = 1.0, min_amplitude = 0.1 }
+
 [[scenario]]
 id = "S5"
 kind = "state"

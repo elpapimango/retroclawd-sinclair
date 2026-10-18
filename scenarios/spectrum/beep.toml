@@ -1,0 +1,17 @@
+# rcld build beep.toml -o beep.<tap|sna|z80|szx>   (scenarios/build.sh does all four into software/scenarios/)
+machine = "spectrum"
+name = "BEEP"
+entry = "start"
+output = "beep.sna"
+
+[[input]]
+asm = ["beep.asm"]
+
+[[region]]
+name = "ram"
+start = 0x6000
+end = 0xFFFF
+
+[options]
+sp = 0xFF00
+border = 2
