@@ -79,6 +79,18 @@ frames = 450
 files = { snapshot = "sinclair/software/scenarios/spectrum-beep.sna" }
 audio = { from_s = 4.0, to_s = 8.0, tone_hz = 520.0, tone_tolerance_pct = 1.0, min_amplitude = 0.1 }
 
+# S7: zx-diagnostics v0.37 (Brendan Alford, Dylan Smith) as the 16K ROM, a third-party hardware test shipped for the platform:
+# after its lower 16K RAM test the screen reads PASS and the diagnostic hardware is not detected (no test board). The reference
+# is ZEsarUX 13.0 with the same ROM (--romfile), 30 s in; retroclawd 1500 frames in. Their pictures agree.
+[[scenario]]
+id = "S7"
+kind = "screen"
+frames = 1500
+files = { rom = "sinclair/software/diagnostics/zx-diagnostics-testrom.bin" }
+golden = "zxs48/S7-diag.png"
+golden_sha256 = "3a40b5aa797a02b9aae55e1805670d2c1ff01dd866d8e298570e8b075f9f2e49"
+compare = { mode = "similarity", anchor_ground = true, max_mad = 1.0, crop = [0.0, 0.0, 1.0, 0.5], reason = "the other emulator draws the Spectrum paper as 0xC0 and ours as 0xCD (anchor_ground scales each picture so its paper is full white; the pictures were compared pixel by pixel and differ only in that grey); the crop is the title bar, the lower RAM test result and the menu" }
+
 [[scenario]]
 id = "S5"
 kind = "state"
