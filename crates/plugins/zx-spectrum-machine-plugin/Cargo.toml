@@ -8,20 +8,20 @@ license = "GPL-3.0-or-later"
 name = "zx_spectrum_machine_plugin_impl"
 
 [dependencies]
-build-info = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "e7a49632403a1206851dd187c094b3bb38acbe62" }
-machine = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "e7a49632403a1206851dd187c094b3bb38acbe62" }
-plugin-api = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "e7a49632403a1206851dd187c094b3bb38acbe62" }
+build-info = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "805e092161858ece48c1ed10bca381a7aaa4c6ea" }
+machine = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "805e092161858ece48c1ed10bca381a7aaa4c6ea" }
+plugin-api = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "805e092161858ece48c1ed10bca381a7aaa4c6ea" }
 serde = { version = "1", features = ["derive"] }
-z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "e7a49632403a1206851dd187c094b3bb38acbe62" }
+z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "805e092161858ece48c1ed10bca381a7aaa4c6ea" }
 zx-spectrum = { path = "../../machines/zx-spectrum" }
 z80-snapshot = { path = "../../formats/z80-snapshot" }
 sna-snapshot = { path = "../../formats/sna-snapshot" }
 szx-snapshot = { path = "../../formats/szx-snapshot" }
-zx-tape = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "e7a49632403a1206851dd187c094b3bb38acbe62" }
-dsk = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "e7a49632403a1206851dd187c094b3bb38acbe62" }
+zx-tape = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "805e092161858ece48c1ed10bca381a7aaa4c6ea" }
+dsk = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "805e092161858ece48c1ed10bca381a7aaa4c6ea" }
 
 [dev-dependencies]
 toml = "0.8"
 
 [build-dependencies]
-build-info = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "e7a49632403a1206851dd187c094b3bb38acbe62" }
+build-info = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "805e092161858ece48c1ed10bca381a7aaa4c6ea" }

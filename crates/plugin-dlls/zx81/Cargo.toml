@@ -10,5 +10,5 @@ name = "zx81_machine_plugin"
 crate-type = ["cdylib"]
 
 [dependencies]
-plugin-api = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "e7a49632403a1206851dd187c094b3bb38acbe62" }
+plugin-api = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "805e092161858ece48c1ed10bca381a7aaa4c6ea" }
 zx81-machine-plugin = { path = "../../plugins/zx81-machine-plugin" }
