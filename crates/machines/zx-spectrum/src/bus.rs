@@ -583,12 +583,20 @@ impl ZxSpectrumBus {
     /// +2A/+3 too as an unverified-but-documented extension (that source
     /// has no +2A/+3-specific data), same epistemic tier as this file's
     /// other commonly-documented, not disassembly-verified, facts.
+    ///
+    /// The Z80 samples the bus "during the final T-state of the I/O machine
+    /// cycle" (the Sinclair wiki's floating-bus page), and `read_io` runs
+    /// once the cycle's four T-states have been counted, so the T-state
+    /// looked up is the one before `frame_tstate` (found by the rc-suite
+    /// floating-bus program: with `frame_tstate` itself the bytes arrived
+    /// one T-state late against that page's numbers).
     fn floating_bus_byte(&self) -> u8 {
         let profile = self.contention_profile();
-        if self.frame_tstate < profile.start {
+        let now = self.frame_tstate.saturating_sub(1);
+        if now < profile.start {
             return 0xFF;
         }
-        let rel = self.frame_tstate - profile.start;
+        let rel = now - profile.start;
         let line = rel / profile.period;
         if line >= CONTENDED_SCREEN_LINES {
             return 0xFF;
@@ -2519,17 +2527,17 @@ mod contention_tests {
 
         let start = CONTENTION_48K.start;
 
-        bus.frame_tstate = start; // local offset 0: idle
+        bus.frame_tstate = start + 1; // local offset 0: idle
         assert_eq!(bus.read_io(0xFFFF), 0xFF);
-        bus.frame_tstate = start + 3; // local offset 3: bitmap
+        bus.frame_tstate = start + 3 + 1; // local offset 3: bitmap (read_io runs after the cycle's last T-state)
         assert_eq!(bus.read_io(0xFFFF), 0x11);
-        bus.frame_tstate = start + 4; // local offset 4: attribute
+        bus.frame_tstate = start + 4 + 1; // local offset 4: attribute (read_io runs after the cycle's last T-state)
         assert_eq!(bus.read_io(0xFFFF), 0x22);
-        bus.frame_tstate = start + 5; // local offset 5: bitmap+1
+        bus.frame_tstate = start + 5 + 1; // local offset 5: bitmap+1 (read_io runs after the cycle's last T-state)
         assert_eq!(bus.read_io(0xFFFF), 0x33);
-        bus.frame_tstate = start + 6; // local offset 6: attribute+1
+        bus.frame_tstate = start + 6 + 1; // local offset 6: attribute+1 (read_io runs after the cycle's last T-state)
         assert_eq!(bus.read_io(0xFFFF), 0x44);
-        bus.frame_tstate = start + 7; // local offset 7: idle again
+        bus.frame_tstate = start + 7 + 1; // local offset 7: idle again
         assert_eq!(bus.read_io(0xFFFF), 0xFF);
     }
 
