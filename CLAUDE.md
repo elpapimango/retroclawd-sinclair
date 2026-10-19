@@ -13,6 +13,13 @@ The Sinclair (ZX81, ZX Spectrum) machine family of retroclawd, split out of the 
 - `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all`
 - Private host: `CARGO_NET_GIT_FETCH_WITH_CLI=true` and git credentials for `github.com/elpapimango/retroclawd`
 
+## Scenario manifests (2026-10-18)
+
+`zx81, zx-spectrum, zx-spectrum-128 and zx-spectrum-2a3` have `<id>.manifest.toml` files here: the playbook's standard scenarios (S1 boot, S2 typed input, S3 media, S4 audio, S5 state, S6
+timing, S7 hardware test) against ZEsarUX 13.0, run by `rc-scenarios` of `retroclawd-tools` (see the host's `CLAUDE.md` for the command and
+environment). The test media come from `scenarios/spectrum/*.asm` (rcld layouts: the hello, beep and ay programs) and `software/zx81/hello.p` (`retroclawd-tools/scripts/make_zx81_p.py`); `scenarios/build.sh` builds them into the git-ignored `software/scenarios/`. Goldens are
+not committed. Known gaps are `status = "known-gap"` entries with a note under `docs/`: S6 on the ZX81 (`docs/zx81-timing-gap.md`).
+
 ## Crate notes
 
 The notes below were written in the host repository before the split and refer to it in places (`retroclawd`'s GUI, `HostedMachine`, `emu_thread`, the CLI flags): those parts are host code and are documented in the host's CLAUDE.md.
