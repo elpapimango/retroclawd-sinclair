@@ -10,5 +10,5 @@ name = "zx_spectrum_machine_plugin"
 crate-type = ["cdylib"]
 
 [dependencies]
-plugin-api = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "98162c455e7e838679dc4ee4d5d32fcb5ce791df" }
+plugin-api = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "00edb656a76f8b920b0e22fd27f2e39dfb4056a9" }
 zx-spectrum-machine-plugin = { path = "../../plugins/zx-spectrum-machine-plugin" }
