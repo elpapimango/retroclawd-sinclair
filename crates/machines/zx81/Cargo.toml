@@ -5,10 +5,10 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 
 [dependencies]
-z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "58dc416bd378b452d63117be8d23a5bb7cc0265d" }
-machine = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "58dc416bd378b452d63117be8d23a5bb7cc0265d" }
+z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "98162c455e7e838679dc4ee4d5d32fcb5ce791df" }
+machine = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "98162c455e7e838679dc4ee4d5d32fcb5ce791df" }
 sinclair-keyboard = { path = "../../chips/sinclair-keyboard" }
 zx81-snapshot = { path = "../../formats/zx81-snapshot" }
-zx-tape = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "58dc416bd378b452d63117be8d23a5bb7cc0265d" }
+zx-tape = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "98162c455e7e838679dc4ee4d5d32fcb5ce791df" }
 serde = { version = "1", features = ["derive"] }
 bincode = { version = "2", features = ["serde"] }

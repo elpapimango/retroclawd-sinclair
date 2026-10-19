@@ -11,7 +11,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 [[package]]
 name = "ay-3-8910"
 version = "0.1.0"
-source = "git+https://github.com/elpapimango/retroclawd-crates?rev=58dc416bd378b452d63117be8d23a5bb7cc0265d#58dc416bd378b452d63117be8d23a5bb7cc0265d"
+source = "git+https://github.com/elpapimango/retroclawd-crates?rev=98162c455e7e838679dc4ee4d5d32fcb5ce791df#98162c455e7e838679dc4ee4d5d32fcb5ce791df"
 dependencies = [
  "serde",
 ]
@@ -39,7 +39,7 @@ dependencies = [
 [[package]]
 name = "build-info"
 version = "0.1.0"
-source = "git+https://github.com/elpapimango/retroclawd-crates?rev=58dc416bd378b452d63117be8d23a5bb7cc0265d#58dc416bd378b452d63117be8d23a5bb7cc0265d"
+source = "git+https://github.com/elpapimango/retroclawd-crates?rev=98162c455e7e838679dc4ee4d5d32fcb5ce791df#98162c455e7e838679dc4ee4d5d32fcb5ce791df"
 
 [[package]]
 name = "cfg-if"
@@ -59,7 +59,7 @@ dependencies = [
 [[package]]
 name = "dsk"
 version = "0.1.0"
-source = "git+https://github.com/elpapimango/retroclawd-crates?rev=58dc416bd378b452d63117be8d23a5bb7cc0265d#58dc416bd378b452d63117be8d23a5bb7cc0265d"
+source = "git+https://github.com/elpapimango/retroclawd-crates?rev=98162c455e7e838679dc4ee4d5d32fcb5ce791df#98162c455e7e838679dc4ee4d5d32fcb5ce791df"
 
 [[package]]
 name = "equivalent"
@@ -97,7 +97,7 @@ dependencies = [
 [[package]]
 name = "machine"
 version = "0.1.0"
-source = "git+https://github.com/elpapimango/retroclawd-crates?rev=58dc416bd378b452d63117be8d23a5bb7cc0265d#58dc416bd378b452d63117be8d23a5bb7cc0265d"
+source = "git+https://github.com/elpapimango/retroclawd-crates?rev=98162c455e7e838679dc4ee4d5d32fcb5ce791df#98162c455e7e838679dc4ee4d5d32fcb5ce791df"
 
 [[package]]
 name = "memchr"
@@ -118,7 +118,7 @@ dependencies = [
 [[package]]
 name = "nec765"
 version = "0.1.0"
-source = "git+https://github.com/elpapimango/retroclawd-crates?rev=58dc416bd378b452d63117be8d23a5bb7cc0265d#58dc416bd378b452d63117be8d23a5bb7cc0265d"
+source = "git+https://github.com/elpapimango/retroclawd-crates?rev=98162c455e7e838679dc4ee4d5d32fcb5ce791df#98162c455e7e838679dc4ee4d5d32fcb5ce791df"
 dependencies = [
  "dsk",
  "serde",
@@ -127,7 +127,7 @@ dependencies = [
 [[package]]
 name = "plugin-api"
 version = "0.1.0"
-source = "git+https://github.com/elpapimango/retroclawd-crates?rev=58dc416bd378b452d63117be8d23a5bb7cc0265d#58dc416bd378b452d63117be8d23a5bb7cc0265d"
+source = "git+https://github.com/elpapimango/retroclawd-crates?rev=98162c455e7e838679dc4ee4d5d32fcb5ce791df#98162c455e7e838679dc4ee4d5d32fcb5ce791df"
 dependencies = [
  "bincode",
  "serde",
@@ -300,7 +300,7 @@ dependencies = [
 [[package]]
 name = "z80"
 version = "0.1.0"
-source = "git+https://github.com/elpapimango/retroclawd-crates?rev=58dc416bd378b452d63117be8d23a5bb7cc0265d#58dc416bd378b452d63117be8d23a5bb7cc0265d"
+source = "git+https://github.com/elpapimango/retroclawd-crates?rev=98162c455e7e838679dc4ee4d5d32fcb5ce791df#98162c455e7e838679dc4ee4d5d32fcb5ce791df"
 dependencies = [
  "machine",
  "serde",
@@ -366,7 +366,7 @@ dependencies = [
 [[package]]
 name = "zx-tape"
 version = "0.1.0"
-source = "git+https://github.com/elpapimango/retroclawd-crates?rev=58dc416bd378b452d63117be8d23a5bb7cc0265d#58dc416bd378b452d63117be8d23a5bb7cc0265d"
+source = "git+https://github.com/elpapimango/retroclawd-crates?rev=98162c455e7e838679dc4ee4d5d32fcb5ce791df#98162c455e7e838679dc4ee4d5d32fcb5ce791df"
 dependencies = [
  "flate2",
  "serde",
