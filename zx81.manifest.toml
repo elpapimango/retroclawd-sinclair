@@ -41,14 +41,14 @@ golden = "zx81/S3-load.png"
 golden_sha256 = "99fb62c163966c58bd7e1cd032e4e520d62d0142386b3cc549a314010f4d94b3"
 compare = { mode = "similarity", max_mad = 2.0, crop = [0.0, 0.0, 0.2, 0.06], reason = "palette and rasteriser of another emulator; the crop is the top-left cells where the loaded program 10 PRINT \"HELLO\" (made by retroclawd-tools/scripts/make_zx81_p.py) prints HELLO. Only the .p format is covered: .p81 and tape formats are covered by the hand-written suite" }
 
+# S6: 312 lines of 207 T-states (the ULA's line counter), as ZEsarUX counts; closed 2026-10-19, see
+# docs/zx81-timing-gap.md. The machine runs whole instructions, so a frame ends up to one instruction (23 T-states) late.
 [[scenario]]
 id = "S6"
 kind = "timing"
 frames = 100
 cycles_per_frame = 64584
-cycles_tolerance = 0
-status = "known-gap"
-gap = { reason = "ZEsarUX counts 207 T-states per line (64584 per frame at 3.2292 MHz), retroclawd 208 (65003 measured); which one real hardware has is not settled", evidence = "machines/sinclair/docs/zx81-timing-gap.md" }
+cycles_tolerance = 23
 
 [[scenario]]
 id = "S4"

@@ -19,13 +19,21 @@ pub const RAM_SIZE: usize = 0x0400;
 /// The RAM sizes (in K) a machine can have: the on-board 1K, a 2K upgrade, and the 16K, 32K, 48K and 56K packs.
 pub const RAM_KB_CHOICES: [usize; 6] = [1, 2, 16, 32, 48, 56];
 
-/// Real ZX81 NMI generator rate while running: one pulse per TV line, 64us
-/// (PAL) -- 3.25MHz clock_hz * 64e-6s = 208 T-states exactly, which is also
-/// consistent with PAL's well-known 312.5 lines/frame * 50Hz = 15625 Hz
-/// line rate (1/15625Hz = 64us). Applied for NTSC/Japan too as a documented
-/// approximation, same stance as `clock_hz`'s own NTSC placeholder below --
-/// real NTSC ZX81/TS1000 line timing isn't verified here.
-const NMI_PERIOD_TSTATES: u32 = 208;
+/// Real ZX81 NMI generator rate while running: one pulse per TV line. The
+/// ULA's sync/NMI generator counts 207 cycles of the 3.25 MHz clock and
+/// resets (63.7 us, a little short of PAL's 64 us), and the ROM's display
+/// code is written for 207 T-states per line (Andy Rea's ULA schematics,
+/// the CLK emulator's ZX80/ZX81 notes; EightyOne and ZEsarUX count 207 too).
+/// An earlier value here, 208, was derived as 64 us * 3.25 MHz instead.
+/// Applied for NTSC/Japan too (the same ULA counter).
+const NMI_PERIOD_TSTATES: u32 = 207;
+
+/// TV lines in one host frame: a PAL frame of 312 (262 on NTSC). The ZX81
+/// draws its own vertical sync in software, so this only sets the pacing
+/// quantum `frame_rate` reports (312 x 207 = 64584 T-states, 50.32 Hz),
+/// the frame ZEsarUX counts too.
+const PAL_FRAME_LINES: u32 = 312;
+const NTSC_FRAME_LINES: u32 = 262;
 
 /// A ZX81: a Z80 core, an 8K ROM, 1K of RAM, a keyboard matrix, and video
 /// output (`render_frame`, decoded from the display file using the real
@@ -356,6 +364,18 @@ impl Machine for Zx81 {
         }
     }
 
+    /// One TV frame of 207-T-state lines exactly (see `PAL_FRAME_LINES`).
+    fn frame_rate(&self) -> machine::FrameRate {
+        let lines = match self.region {
+            Region::Pal => PAL_FRAME_LINES,
+            Region::Ntsc | Region::Japan => NTSC_FRAME_LINES,
+        };
+        machine::FrameRate {
+            num: u32::try_from(self.clock_hz()).unwrap_or(u32::MAX),
+            den: lines * NMI_PERIOD_TSTATES,
+        }
+    }
+
     fn run(&mut self, running: &mut dyn FnMut(&dyn Machine) -> bool) -> RunStats {
         Clock::new(self.frame_hz()).run(self, running)
     }
@@ -557,7 +577,7 @@ mod tests {
     fn nmi_fires_after_enough_cycles_once_generator_is_started() {
         let mut zx81 = Zx81::new(vec![0; ROM_SIZE], Region::Pal);
         // OUT (0xFE),A starts the generator (real ROM's own opcode), then
-        // enough NOPs to cross NMI_PERIOD_TSTATES (208).
+        // enough NOPs to cross NMI_PERIOD_TSTATES (207).
         let mut program = vec![0xD3, 0xFE];
         program.extend(std::iter::repeat_n(0x00u8, 100));
         zx81.load(RAM_BASE.into(), &program);

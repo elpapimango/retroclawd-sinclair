@@ -18,7 +18,7 @@ The Sinclair (ZX81, ZX Spectrum) machine family of retroclawd, split out of the 
 `zx81, zx-spectrum, zx-spectrum-128 and zx-spectrum-2a3` have `<id>.manifest.toml` files here: the playbook's standard scenarios (S1 boot, S2 typed input, S3 media, S4 audio, S5 state, S6
 timing, S7 hardware test) against ZEsarUX 13.0, run by `rc-scenarios` of `retroclawd-tools` (see the host's `CLAUDE.md` for the command and
 environment). The test media come from `scenarios/spectrum/*.asm` (rcld layouts: the hello, beep and ay programs) and `software/zx81/hello.p` (`retroclawd-tools/scripts/make_zx81_p.py`); `scenarios/build.sh` builds them into the git-ignored `software/scenarios/`. Goldens are
-not committed. Known gaps are `status = "known-gap"` entries with a note under `docs/`: S6 on the ZX81 (`docs/zx81-timing-gap.md`).
+not committed. No known gaps remain. S6 on the ZX81 was closed 2026-10-19: the line is 207 T-states, the frame 312 lines (`docs/zx81-timing-gap.md`).
 
 ## Crate notes
 
@@ -101,12 +101,12 @@ The notes below were written in the host repository before the split and refer t
   `Zx81Bus::fetch_opcode` makes an opcode fetch at `0x8000`+ a NOP when the byte's bit 6 is clear, which is how
   the ROM draws a picture by running the display file as code (hardware facts and sources are
   in the `rc-suite` ZX81 cases of `retroclawd-tools`). `Zx81::step` also fires real NMIs itself, at
-  208 T-states (64us, the real PAL TV line rate) while
+  207 T-states (the ULA's line counter, 63.7us; 208 until 2026-10-19, see `docs/zx81-timing-gap.md`) while
   `Zx81Bus::nmi_generator_running` is set -- decoded from bit 1 of the OUT
   port address, verified against `roms/zx81/zx81.rom`'s own `OUT (0xFD)`/
   `OUT (0xFE)` usage, not recollection. This lives inside `Zx81::step`
   rather than going through `Machine::request_interrupt`'s once-per-frame
-  shape because 208 T-states is far finer-grained than once a frame. What
+  shape because 207 T-states is far finer-grained than once a frame. What
   the ROM's NMI handler does internally isn't modeled or needed -- once
   the interrupt timing is correct, the real ROM's own code handles the
   rest through this core's already-ZEXALL-accurate dispatch, same

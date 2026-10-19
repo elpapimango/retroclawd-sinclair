@@ -16,6 +16,13 @@ use zx81::{Zx81, Zx81Key};
 
 const PLUGIN_ID: &[u8] = b"retroclawd.zx81.machine";
 
+/// `MachineMetadata::frame_rate`: one TV frame exactly (the host paces and
+/// budgets by it instead of the rounded `frame_hz`).
+fn exact_frame_rate(machine: &Zx81) -> (u32, u32) {
+    let rate = Machine::frame_rate(machine);
+    (rate.num, rate.den)
+}
+
 fn bitmap_palette() -> Vec<BitmapPaletteColor> {
     vec![
         BitmapPaletteColor {
@@ -254,6 +261,7 @@ fn create_machine(req: MachineCreateRequest) -> Result<MachineCreateResponse, St
     let instance = state.allocate_instance();
     let mut machine = Zx81::with_ram_kb(rom.to_vec(), region, ram_kb)?;
     machine.set_fast_tape_load(fast_tape_load);
+    let frame_rate = exact_frame_rate(&machine);
     state.instances.insert(
         instance,
         InstanceRecord {
@@ -273,6 +281,7 @@ fn create_machine(req: MachineCreateRequest) -> Result<MachineCreateResponse, St
             notes: vec!["external machine plugin v1".to_string()],
             bitmap_palette: bitmap_palette(),
             bitmap_defaults: Some(bitmap_defaults()),
+            frame_rate,
             ..MachineMetadata::default()
         },
     })
@@ -865,6 +874,7 @@ fn handle_debug_command(
             notes: vec!["external machine plugin v1".to_string()],
             bitmap_palette: bitmap_palette(),
             bitmap_defaults: Some(bitmap_defaults()),
+            frame_rate: exact_frame_rate(&record.machine),
             ..MachineMetadata::default()
         })),
     }

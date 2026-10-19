@@ -1,5 +1,13 @@
 # ZX81 timing: 208 against 207 T-states per line (S6 known gap)
 
+**Closed 2026-10-19.** The ULA's sync/NMI generator counts 207 cycles of the 3.25 MHz clock and resets (63.7 us,
+a little short of PAL's 64 us); the ROM's display code is written for 207 T-states per line. Sources: Andy Rea's ZX81 ULA
+schematics (cpcwiki), the CLK emulator's "The ZX80 and ZX81" notes; EightyOne and ZEsarUX use 207 as well. The old 208 had been
+derived as 64 us x 3.25 MHz. `Zx81` now fires its NMI every 207 T-states and reports an exact frame rate of 3 250 000 / (312 x 207)
+(50.32 Hz; 262 lines on NTSC) through `Machine::frame_rate` and the plugin's `MachineMetadata::frame_rate`, so the host's frame is
+64584 T-states. The clock stays 3.25 MHz (the 6.5 MHz crystal halved); ZEsarUX's 3.2292 MHz is its own choice to make 312 x 207
+lines come out at exactly 50 Hz. S6 measures 64584 plus at most one instruction per frame.
+
 Found 2026-10-18 by `zx81.manifest.toml` scenario S6.
 
 | | clock | T-states per line | per frame (312 lines) | frame rate |
