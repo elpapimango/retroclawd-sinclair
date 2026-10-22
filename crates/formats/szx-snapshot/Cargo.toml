@@ -5,5 +5,5 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 
 [dependencies]
-z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "c240a7aee11208ceefc3ba66cc4caf6c8c914793" }
+z80 = { git = "https://github.com/elpapimango/retroclawd-crates", rev = "39dfdcc276719bffd9da53ead351e0d3da14b1bb" }
 flate2 = "1"
